@@ -258,6 +258,67 @@ test('no tracked file names the engagement', (t) => {
 });
 
 /*
+  The same question as the roster test, asked the other way round.
+
+  That one needs a profile to know whose names to look for, so it can only run
+  where an engagement lives — and once the engagement is over and the profile
+  is deleted, it can never run again. It skips honestly, and a guard that
+  cannot run is not protecting anything.
+
+  Inverting it needs nothing. Every name this codebase writes into an actor
+  field is a fixture, and the fixtures are supposed to come from the example
+  roster; so instead of asking "is any real name here", ask "is every name here
+  one we put here on purpose". A surname that arrives from an engagement fails
+  it without this file ever having to know that surname.
+
+  Quoted literals only: an actor key, a colon, and a name in quotes. Prose
+  about an analyst is not a fixture, and matching prose would make this fail on
+  its own comments — which it did, on the first draft of this one, for an
+  example written out in full a line above here.
+
+  A name ends in a letter, so a stray apostrophe cannot be swallowed into it,
+  and is at least three characters — the same floor the roster test uses, and
+  for the same reason. Half this suite files things as 'x' or 'a'; nobody is
+  called that, and treating them as names would mean an allowlist of the
+  alphabet.
+*/
+const ACTOR_LITERAL =
+  /\b(?:analyst|actor|createdBy|created_by|changedBy|uploadedBy|author)['"]?\s*[:=]\s*['"]([A-Za-z][A-Za-z'-]{1,19}[A-Za-z])['"]/g;
+
+/*
+  Actors that are not people. Each is a role the code writes itself, and each
+  is listed rather than pattern-matched so a new one has to be looked at.
+*/
+const NOT_A_PERSON = new Set([
+  'seed',       // store/seed.js, filling the example profile
+  'operator',   // the operator token has no roster identity
+  'claude',     // the model, when a turn files something
+  'import',     // the CSV and Nessus importers
+  'recovery',   // the one-off migrations under tools/
+  'test', 'smoke', 'probe',   // fixtures that say what they are
+  'mallory',    // the attacker in an impersonation test, lowercase on purpose
+]);
+
+test('every analyst name in the tree is one we put there', () => {
+  const roster = new Set(
+    JSON.parse(readFileSync('missions/example/roster.json', 'utf8')).members.map(m => m.name));
+  assert.ok(roster.size >= 3, 'the example roster is the allowlist; it cannot be empty');
+
+  const hits = [];
+  for (const f of tracked()) {
+    const body = readable(f);
+    if (body === null) continue;
+    for (const m of body.matchAll(ACTOR_LITERAL)) {
+      const name = m[1];
+      if (roster.has(name) || NOT_A_PERSON.has(name)) continue;
+      hits.push(`${name} in ${f}`);
+    }
+  }
+  assert.deepEqual(hits, [],
+    'an actor here should be an example-roster name; a real one is engagement data');
+});
+
+/*
   The profile directory is the mechanism the rest of this depends on. If the
   ignore rule is ever relaxed, an engagement's terrain and roster land in the
   next commit silently — the files are already on disk, waiting.

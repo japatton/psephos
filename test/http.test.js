@@ -127,7 +127,7 @@ test('login sets the cookies EventSource needs', async () => {
   const res = await fetch(base + '/api/login', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ token: TOKEN, analyst: 'jpatton' }),
+    body: JSON.stringify({ token: TOKEN, analyst: 'Lindqvist' }),
   });
   assert.equal(res.status, 204);
   const cookies = res.headers.getSetCookie();
@@ -136,7 +136,7 @@ test('login sets the cookies EventSource needs', async () => {
   // The name gates DM membership and stamps chat authorship, so a
   // caller-supplied one would be an impersonation primitive.
   assert.ok(cookies.some(c => c.includes('hunt_analyst=operator')));
-  assert.ok(!cookies.some(c => c.includes('jpatton')));
+  assert.ok(!cookies.some(c => c.includes('Lindqvist')));
 });
 
 test('login with a bad token is refused', async () => {
@@ -151,7 +151,7 @@ test('login with a bad token is refused', async () => {
 test('promote moves state and the server token cannot claim a name', async () => {
   const res = await fetch(`${base}/api/records/${recordId}/promote`, {
     method: 'POST',
-    headers: { cookie: `hunt_token=${TOKEN}; hunt_analyst=jpatton` },
+    headers: { cookie: `hunt_token=${TOKEN}; hunt_analyst=Lindqvist` },
   });
   assert.equal(res.status, 200);
   const rec = await res.json();

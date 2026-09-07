@@ -26,12 +26,12 @@ test('a created record is pending and time-parsed', () => {
     description: 'EARLIEST EVIDENCE OF COMPROMISE',
     confidence: 'High',
     mitre: 'T1071.001',
-  }, { analyst: 'jpatton' });
+  }, { analyst: 'Lindqvist' });
 
   assert.equal(r.state, 'pending');
   assert.equal(r.time_tier, 'exact');
   assert.equal(r.time_parsed, '2026-08-13T17:59:02.000Z');
-  assert.equal(r.created_by, 'jpatton');
+  assert.equal(r.created_by, 'Lindqvist');
 });
 
 test('an unmapped destination is discovered as a host', () => {
@@ -55,11 +55,11 @@ test('blank and N/A fields are stored as null, not empty strings', () => {
 test('promote and deny each write exactly one audit row', () => {
   const db = fresh();
   const r = createRecord(db, { description: 'x' }, { analyst: 'a' });
-  const p = promoteRecord(db, r.id, 'jpatton');
+  const p = promoteRecord(db, r.id, 'Lindqvist');
   assert.equal(p.state, 'filed');
-  assert.equal(p.adjudicated_by, 'jpatton');
+  assert.equal(p.adjudicated_by, 'Lindqvist');
   assert.equal(auditCount(db, r.id), 1);
-  const d = denyRecord(db, r.id, 'jpatton');
+  const d = denyRecord(db, r.id, 'Lindqvist');
   assert.equal(d.state, 'denied');
   assert.equal(auditCount(db, r.id), 2);
 });
@@ -68,7 +68,7 @@ test('correcting event_time re-derives the timeline position', () => {
   const db = fresh();
   const r = createRecord(db, { event_time: 'N/A', description: 'x' }, { analyst: 'a' });
   assert.equal(r.time_tier, 'unplaceable');
-  const u = updateRecord(db, r.id, { event_time: '2026-08-19 ~11:59' }, 'jpatton');
+  const u = updateRecord(db, r.id, { event_time: '2026-08-19 ~11:59' }, 'Lindqvist');
   assert.equal(u.time_tier, 'approximate');
   assert.equal(u.time_parsed, '2026-08-19T11:59:00.000Z');
 });
@@ -98,7 +98,7 @@ test('denying a record withdraws its connection from the map', () => {
     source_ip: '10.20.1.11', destination_ip: '198.51.100.7', description: 'c2',
   }, { analyst: 'a' });
   assert.equal(derivedConnections(db).length, 1);
-  denyRecord(db, r.id, 'jpatton');
+  denyRecord(db, r.id, 'Lindqvist');
   assert.equal(derivedConnections(db).length, 0);
 });
 
@@ -134,12 +134,12 @@ test('a proposed edge starts proposed and adjudicates once', () => {
   const e = proposeEdge(db, { srcRecordId: a.id, dstRecordId: b.id, kind: 'caused', rationale: '5h05m later' }, 'claude');
   assert.equal(e.status, 'proposed');
 
-  const c = confirmEdge(db, e.id, 'jpatton');
+  const c = confirmEdge(db, e.id, 'Lindqvist');
   assert.equal(c.status, 'confirmed');
-  assert.equal(c.adjudicated_by, 'jpatton');
+  assert.equal(c.adjudicated_by, 'Lindqvist');
   assert.equal(auditCount(db, e.id), 1);
 
-  denyEdge(db, e.id, 'jpatton');
+  denyEdge(db, e.id, 'Lindqvist');
   assert.equal(auditCount(db, e.id), 2);
   assert.equal(listEdges(db, { status: 'denied' }).length, 1);
 });

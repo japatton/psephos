@@ -112,9 +112,9 @@ test('normalizeIp extracts the address and rejects nonsense', () => {
 test('verdict records who and when, and writes one audit row', () => {
   const db = fresh();
   const id = resolveHost(db, { ip: '10.20.1.11' });
-  const h = setVerdict(db, id, 'confirmed', 'jpatton');
+  const h = setVerdict(db, id, 'confirmed', 'Lindqvist');
   assert.equal(h.verdict, 'confirmed');
-  assert.equal(h.verdict_by, 'jpatton');
+  assert.equal(h.verdict_by, 'Lindqvist');
   assert.ok(h.verdict_at);
   assert.equal(db.prepare('select count(*) c from audit where target_id = ?').get(id).c, 1);
 });
@@ -161,7 +161,7 @@ test('re-seeding updates a relocated host in place rather than duplicating it', 
   initSchema(db);
   seedHosts(db, [{ name: 'DC', ip: '10.20.1.2', enclave: 'Enclave A', segment: 'servers', cidr: '10.20.1.0/24' }]);
   const first = listHosts(db)[0];
-  setVerdict(db, first.id, 'suspected', 'jpatton');
+  setVerdict(db, first.id, 'suspected', 'Lindqvist');
 
   seedHosts(db, [{
     name: 'EX-DC.example.test', ip: '10.20.1.10', enclave: 'Enclave A', segment: 'servers',
@@ -182,7 +182,7 @@ test('a seeded host the terrain drops is removed, and a lost verdict is reported
   initSchema(db);
   seedHosts(db, [{ name: 'Gone', ip: '10.1.1.1' }, { name: 'Stays', ip: '10.1.1.2' }]);
   const gone = listHosts(db).find(h => h.name === 'Gone');
-  setVerdict(db, gone.id, 'confirmed', 'jpatton');
+  setVerdict(db, gone.id, 'confirmed', 'Lindqvist');
 
   const res = seedHosts(db, [{ name: 'Stays', ip: '10.1.1.2' }]);
   assert.deepEqual(listHosts(db).map(h => h.name), ['Stays']);
