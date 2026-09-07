@@ -315,48 +315,53 @@ Three are worth remembering as classes rather than as fixes:
 
 ---
 
-## The two profile-driven hygiene guards can never run here again
+## Mission data does not come back, and what that means for the hygiene guards
 
-`repo-hygiene.test.js` asks two questions it cannot answer on its own: does any
-tracked file name somebody on the roster, and does any name the engagement. To
-know that, it has to know the names — and writing them into the test would put
-them in the repository, which is the thing it exists to prevent. So it reads
-them at runtime out of `missions/*/roster.json` and `missions/*/mission.json`,
-skipping `example`, and skips honestly when there is no profile to read.
+Worth writing down because a previous version of this entry got it wrong.
 
-That shape is right and should stay: this file names nobody, so it keeps working
-for whoever runs the tool with an engagement in front of them. But the profile
-for this codebase's own engagement is gone from the machine, and it was never
-committed — only `missions/example/*` has ever been tracked — so the name list is
-not recoverable. **Those two checks will skip on every run of this repository
-from now on.** They were already skipping on every commit made after the profile
-was deleted, which is how a personal handle sat in three test fixtures unnoticed.
+A team that uses this tool clones it, puts their terrain, roster, plan and
+briefing in `missions/<code>/`, and runs it. That directory is gitignored;
+nothing about their engagement is ever meant to enter git, and they are not
+pushing changes back here. The repository and the engagement are separate
+things, and the profile is the seam between them.
 
-What covers it now is `every analyst name in the tree is one we put there`, which
-asks the question the other way round: not "is a real name present" but "is every
-name present one we put here on purpose", against the example roster plus a
-listed set of non-person actors. It needs no profile, so it runs in CI and on a
-stranger's clone.
+So two of the guards in `repo-hygiene.test.js` — does any tracked file name
+somebody on the roster, does any name the engagement — describe a situation
+that should not arise: they can only answer when engagement data is sitting
+in the same tree as the source, which is the state the design exists to
+prevent. They skip here and will keep skipping, and that is the steady state
+rather than a hole.
 
-**The gap that leaves.** The inverted guard only sees names in *actor positions* —
-a quoted `analyst:`, `actor:`, `createdBy:` and so on. A surname in a comment, in
-prose, in a filename, or as a value of some field nobody thought to list is
-invisible to it, and those are exactly the places the profile-driven guard used
-to reach. Two of the leaks it caught historically were of that shape: a name
-inside a generated baseline label, and one in a docstring.
+They are not pointless. They matter in exactly one case: a fork whose
+maintainer is also an operator, editing the tool with a live profile in the
+working copy. That case is not hypothetical — it is what this codebase was
+for its first hundred commits, and every name that ever leaked into the tree
+leaked that way. Anyone forking to customise the tool for their own team is
+in that position, and the guards are for them.
 
-Worth doing if it ever matters enough:
+What protects THIS repository is different and does not depend on a profile
+existing:
 
-- Widen the inverted guard from actor positions to *any capitalised token that
-  looks like a surname and is not a word*, with an explicit allowlist. That is a
-  much noisier check and the allowlist becomes real work, which is why it was not
-  done now.
-- Or feed a name list into CI through a secret so the original guard can run and
-  fail rather than skip. That means storing the roster in GitHub, which is a
-  trade rather than a fix.
+- `missions/*` is gitignored except `example/`, and a guard fails if a second
+  profile is ever tracked.
+- `every analyst name in the tree is one we put there` — the inverted check.
+  Every name written into an actor field must be an example-roster name or a
+  listed non-person actor, so a surname arriving in a fixture fails without
+  this file knowing any real surname.
+- No routable addresses, no `.mil` or `.gov` domains, no tracked binaries
+  outside the allowlist, nothing holding a credential.
 
-For the record, what was actually checked before publishing: every name-shaped
+**The limit of the inverted check**, since it is now the one doing the work:
+it only sees names in actor positions — a quoted `analyst:`, `createdBy:` and
+so on. A surname in a comment, in prose, in a filename, or in a field nobody
+listed is invisible to it. Two of the leaks caught historically were that
+shape: one inside a generated baseline label, one in a docstring. Widening it
+to any surname-shaped capitalised token would need a real allowlist of
+ordinary words and would be noisy; it has not been worth that yet, and this
+paragraph is here so the decision is a decision rather than an oversight.
+
+For the record, what was checked by hand before publishing: every name-shaped
 token ever used in an actor position across the 125 commits of the private
 history — `Jones`, `Patton`, `Rios`, `Zinkone` beyond the example roster — and
-none of them appears anywhere in this tree. That is a scan against the names that
-are known to have been here, not against the roster itself.
+none appears anywhere in this tree. A scan against the names known to have
+been here, which is not the same as a scan against a roster.

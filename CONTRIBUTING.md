@@ -18,10 +18,18 @@ that passes with the behaviour removed is worse than no test, and this suite has
 shipped a few of those; the comments naming them are there so it happens less.
 
 **Nothing from a real network.** No routable addresses, no real hostnames, no
-real people. `test/repo-hygiene.test.js` enforces what it can — documentation
-ranges only (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`), no `.mil` or
-`.gov` domains, one tracked mission profile. Two of its checks read the mission
-profile on the machine, so they skip on a clone; that is not permission.
+real people. An engagement's terrain, roster, plan and briefing live in
+`missions/<code>/`, which is gitignored — that data belongs to the team running
+the tool and is never meant to travel back here. Fixtures and examples use
+`missions/example/` and its four invented names.
+
+`test/repo-hygiene.test.js` enforces what it can without knowing anything about
+your engagement: documentation ranges only (`192.0.2.0/24`, `198.51.100.0/24`,
+`203.0.113.0/24`), no `.mil` or `.gov` domains, one tracked profile, and every
+name in an actor field drawn from the example roster. Two further checks read
+whatever profile is on the machine and skip when there is none; they are there
+for a fork whose maintainer is also an operator, which is the case where a real
+name can reach a tracked file by accident.
 
 ## Style
 
