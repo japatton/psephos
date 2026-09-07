@@ -312,3 +312,51 @@ Three are worth remembering as classes rather than as fixes:
 - **`json()` on the export routes writes headers before serialising.** A throw
   mid-`JSON.stringify` would send a 200 with an empty body. The payloads are
   strings and numbers and no input could be constructed that throws.
+
+---
+
+## The two profile-driven hygiene guards can never run here again
+
+`repo-hygiene.test.js` asks two questions it cannot answer on its own: does any
+tracked file name somebody on the roster, and does any name the engagement. To
+know that, it has to know the names — and writing them into the test would put
+them in the repository, which is the thing it exists to prevent. So it reads
+them at runtime out of `missions/*/roster.json` and `missions/*/mission.json`,
+skipping `example`, and skips honestly when there is no profile to read.
+
+That shape is right and should stay: this file names nobody, so it keeps working
+for whoever runs the tool with an engagement in front of them. But the profile
+for this codebase's own engagement is gone from the machine, and it was never
+committed — only `missions/example/*` has ever been tracked — so the name list is
+not recoverable. **Those two checks will skip on every run of this repository
+from now on.** They were already skipping on every commit made after the profile
+was deleted, which is how a personal handle sat in three test fixtures unnoticed.
+
+What covers it now is `every analyst name in the tree is one we put there`, which
+asks the question the other way round: not "is a real name present" but "is every
+name present one we put here on purpose", against the example roster plus a
+listed set of non-person actors. It needs no profile, so it runs in CI and on a
+stranger's clone.
+
+**The gap that leaves.** The inverted guard only sees names in *actor positions* —
+a quoted `analyst:`, `actor:`, `createdBy:` and so on. A surname in a comment, in
+prose, in a filename, or as a value of some field nobody thought to list is
+invisible to it, and those are exactly the places the profile-driven guard used
+to reach. Two of the leaks it caught historically were of that shape: a name
+inside a generated baseline label, and one in a docstring.
+
+Worth doing if it ever matters enough:
+
+- Widen the inverted guard from actor positions to *any capitalised token that
+  looks like a surname and is not a word*, with an explicit allowlist. That is a
+  much noisier check and the allowlist becomes real work, which is why it was not
+  done now.
+- Or feed a name list into CI through a secret so the original guard can run and
+  fail rather than skip. That means storing the roster in GitHub, which is a
+  trade rather than a fix.
+
+For the record, what was actually checked before publishing: every name-shaped
+token ever used in an actor position across the 125 commits of the private
+history — `Jones`, `Patton`, `Rios`, `Zinkone` beyond the example roster — and
+none of them appears anywhere in this tree. That is a scan against the names that
+are known to have been here, not against the roster itself.
