@@ -1,0 +1,228 @@
+{
+  "source": "Synthetic example terrain. Not a real network.",
+  "vantages": [
+    "EX-DC"
+  ],
+  "enclaves": [
+    {
+      "key": "corp",
+      "name": "Corp",
+      "cidr": "10.20.0.0/16",
+      "description": "Business network",
+      "segments": [
+        {
+          "name": "servers",
+          "cidr": "10.20.1.0/24",
+          "note": "",
+          "hosts": [
+            {
+              "name": "EX-DC.example.test",
+              "ip": "10.20.1.10",
+              "os": "Windows Server",
+              "role": "Domain Controller",
+              "kind": "win",
+              "source": "inventory",
+              "presence": "confirmed",
+              "presenceNote": "Confirmed at recorded address",
+              "domainJoined": true,
+              "observedFrom": [
+                "EX-DC=confirmed"
+              ]
+            },
+            {
+              "name": "EX-FILE.example.test",
+              "ip": "10.20.1.11",
+              "os": "Windows Server",
+              "role": "File Server",
+              "kind": "win",
+              "source": "inventory",
+              "presence": "confirmed",
+              "presenceNote": "Confirmed at recorded address",
+              "domainJoined": true,
+              "observedFrom": [
+                "EX-DC=confirmed"
+              ]
+            },
+            {
+              "name": "EX-WEB.example.test",
+              "ip": "10.20.1.12",
+              "os": "Ubuntu 22.04",
+              "role": "Web Server",
+              "kind": "nix",
+              "source": "inventory",
+              "presence": "relocated",
+              "presenceNote": "Alive at a different address than recorded",
+              "domainJoined": false,
+              "observedFrom": [
+                "EX-DC=relocated"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "clients",
+          "cidr": "10.20.2.0/24",
+          "note": "",
+          "hosts": [
+            {
+              "name": "EX-WS-1.example.test",
+              "ip": "10.20.2.21",
+              "os": "Windows 11",
+              "role": "Workstation",
+              "kind": "win",
+              "source": "inventory",
+              "presence": "confirmed",
+              "domainJoined": true,
+              "observedFrom": [
+                "EX-DC=confirmed"
+              ]
+            },
+            {
+              "name": "EX-WS-2.example.test",
+              "ip": "10.20.2.22",
+              "os": "Windows 11",
+              "role": "Workstation",
+              "kind": "win",
+              "source": "inventory",
+              "presence": "unanswered",
+              "presenceNote": "No response at recorded address",
+              "domainJoined": true,
+              "observedFrom": [
+                "EX-DC=unanswered"
+              ]
+            },
+            {
+              "name": "10.20.2.90",
+              "ip": "10.20.2.90",
+              "os": "unknown",
+              "role": "",
+              "kind": "nix",
+              "source": "inventory",
+              "presence": "alive-unidentified",
+              "presenceNote": "Answered, but no PTR record and no AD object",
+              "domainJoined": false,
+              "observedFrom": [
+                "EX-DC=alive-unidentified"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "ot",
+      "name": "OT",
+      "cidr": "10.30.0.0/16",
+      "description": "Process control",
+      "segments": [
+        {
+          "name": "process",
+          "cidr": "10.30.1.0/24",
+          "note": "IT/OT boundary at 10.30.1.1",
+          "hosts": [
+            {
+              "name": "EX-HMI-1",
+              "ip": "10.30.1.20",
+              "os": "Windows 10",
+              "role": "HMI",
+              "kind": "win",
+              "source": "inventory",
+              "presence": "confirmed",
+              "domainJoined": false,
+              "observedFrom": [
+                "EX-DC=confirmed"
+              ]
+            },
+            {
+              "name": "EX-PLC-1",
+              "ip": "10.30.1.30",
+              "os": "embedded",
+              "role": "PLC",
+              "kind": "nix",
+              "source": "inventory",
+              "presence": "confirmed",
+              "domainJoined": false,
+              "observedFrom": [
+                "EX-DC=confirmed"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "field",
+          "cidr": "10.30.2.0/24",
+          "note": "",
+          "hosts": [
+            {
+              "name": "EX-MQTT-1",
+              "ip": "10.30.2.100",
+              "os": "Linux",
+              "role": "MQTT Broker",
+              "kind": "nix",
+              "source": "inventory",
+              "presence": "confirmed",
+              "domainJoined": false,
+              "observedFrom": [
+                "EX-DC=confirmed"
+              ]
+            },
+            {
+              "name": "IP Cam 1",
+              "ip": "10.30.2.40",
+              "os": "embedded",
+              "role": "Camera",
+              "kind": "other",
+              "source": "inventory",
+              "presence": "confirmed",
+              "domainJoined": false,
+              "observedFrom": [
+                "EX-DC=confirmed"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "tooling",
+      "name": "CPT Tooling",
+      "cidr": "10.40.0.0/16",
+      "description": "Deployed team kit",
+      "segments": [
+        {
+          "name": "kit",
+          "cidr": "10.40.1.0/24",
+          "note": "The inventory lists two tools at one address. Kept as listed.",
+          "hosts": [
+            {
+              "name": "ControlThings",
+              "ip": "10.40.1.5",
+              "os": "Linux",
+              "role": "OT toolkit",
+              "kind": "nix",
+              "source": "inventory",
+              "presence": "confirmed",
+              "domainJoined": false,
+              "observedFrom": [
+                "EX-DC=confirmed"
+              ]
+            },
+            {
+              "name": "Sift",
+              "ip": "10.40.1.5",
+              "os": "Linux",
+              "role": "Forensics",
+              "kind": "nix",
+              "source": "inventory",
+              "presence": "confirmed",
+              "domainJoined": false,
+              "observedFrom": [
+                "EX-DC=confirmed"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

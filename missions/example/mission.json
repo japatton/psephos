@@ -1,0 +1,10 @@
+{
+  "name": "Example Engagement",
+  "code": "example",
+  "exercise": true,
+  "week": "Week 1 \u2014 orientation",
+  "notes": "A synthetic profile so a fresh clone starts, and so the tests have terrain to read. Copy it, do not edit it.",
+  "briefing": [
+    "Synthetic range. Replace this list with what the model needs to know and would otherwise assume wrongly: audit gaps, sensor coverage dates, duplicated telemetry, and any traffic that is exercise scaffolding rather than adversary."
+  ]
+}

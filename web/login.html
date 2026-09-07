@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Psephos</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body class="login-body">
+<div class="marking">Exercise data — constructed scenario, not real reporting</div>
+<main class="login-wrap">
+  <form class="login-card" id="f">
+    <img class="login-mark" src="/mark.png" alt="">
+    <h1 class="brand">Psephos</h1>
+    <p class="muted">Enter your team token. It is printed in the server console on start.</p>
+
+    <label for="token">Your token</label>
+    <input id="token" autocomplete="off" placeholder="e.g. K7QM2XPB" required
+           style="text-transform:uppercase;letter-spacing:.18em;font-family:var(--mono)">
+    <p class="hint">The token says who you are, so you never type your name. It opens your own
+      chat window and stamps your name on anything you file. It is not a password: everyone can
+      read everyone's window, which is the point.</p>
+
+    <button type="submit">Enter</button>
+    <p class="err" id="err" hidden>Token not recognised.</p>
+  </form>
+</main>
+<script>
+const f = document.getElementById('f');
+f.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const err = document.getElementById('err');
+  err.hidden = true;
+  const res = await fetch('/api/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token: document.getElementById('token').value.trim() }),
+  });
+  if (res.status === 204) {
+    // Arms the splash on the shell's next load, and only that one: the shell
+    // consumes the flag, so a reload does not replay it. Storage can throw in
+    // a private window, and no splash is worth failing a sign-in over.
+    try { sessionStorage.setItem('psephos.splash', '1'); } catch { /* no splash */ }
+    location.href = '/';
+  } else {
+    /*
+      Ten wrong attempts in a minute and the limiter answers 429 to everything
+      after, correct token included. Reporting that as "Token not recognised"
+      tells somebody who has just typed their token correctly that it is wrong,
+      and the natural response — try again — looks identical to the limiter.
+      The counter keys on the address, so behind a proxy it is one counter for
+      the whole team, which makes the wait worth naming.
+    */
+    err.textContent = res.status === 429
+      ? 'Too many attempts from here. Wait a minute, then try again — this token may well be right.'
+      : 'Token not recognised.';
+    err.hidden = false;
+  }
+});
+</script>
+</body></html>

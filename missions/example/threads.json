@@ -1,0 +1,18 @@
+{
+  "threads": [
+    {
+      "key": "A",
+      "name": "Thread A \u2014 first observed activity",
+      "assessedCell": "",
+      "status": "LIVE",
+      "color": "#4361ff"
+    },
+    {
+      "key": "R",
+      "name": "Thread R \u2014 deconfliction",
+      "assessedCell": "White cell",
+      "status": "NOT ADVERSARY",
+      "color": "#8899ad"
+    }
+  ]
+}

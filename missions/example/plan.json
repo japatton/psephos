@@ -1,0 +1,177 @@
+{
+  "plan": {
+    "name": "Example hunt plan",
+    "intent": "Enough structure to show the shape. Replace it with your own."
+  },
+  "phases": [
+    {
+      "key": "P0",
+      "name": "Phase 0 \u2014 Planning",
+      "intent": "Know the terrain before touching it.",
+      "source": "seed",
+      "tasks": [
+        {
+          "key": "EX-p0-terrain",
+          "title": "Survey and reconcile the terrain",
+          "intent": "The inventory and reality drift. Establish which hosts actually answer before hunting on them.",
+          "source": "seed",
+          "priority": "high",
+          "team": "",
+          "mitre": [
+            "T1590"
+          ],
+          "tools": [
+            "Invoke-TerrainSurvey.ps1"
+          ],
+          "dataSources": [
+            "DNS",
+            "AD",
+            "ICMP"
+          ],
+          "commands": [],
+          "terrain": [],
+          "references": [],
+          "evidenceExpected": "A host list with presence recorded for every entry.",
+          "analysis": "",
+          "doNext": "",
+          "steps": [
+            {
+              "text": "Run the survey from a vantage inside each enclave.",
+              "tooling": "tools/Invoke-TerrainSurvey.ps1",
+              "expect": "One JSON file per vantage.",
+              "source": "seed"
+            },
+            {
+              "text": "Merge the vantages and strip DNS-cache noise.",
+              "tooling": "terrain/extract.mjs",
+              "expect": "A single terrain.json.",
+              "source": "seed"
+            }
+          ],
+          "original": null,
+          "assignees": [],
+          "stepsSource": "authored",
+          "ttpText": "T1590"
+        },
+        {
+          "key": "EX-p0-sensors",
+          "title": "Place network sensors",
+          "intent": "Sensor placement decides what the whole mission can see.",
+          "source": "seed",
+          "priority": "high",
+          "team": "",
+          "mitre": [
+            "T1040"
+          ],
+          "tools": [
+            "Zeek",
+            "Suricata"
+          ],
+          "dataSources": [
+            "span/tap"
+          ],
+          "commands": [],
+          "terrain": [],
+          "references": [],
+          "evidenceExpected": "A tap on every mission-critical path.",
+          "analysis": "",
+          "doNext": "",
+          "steps": [
+            {
+              "text": "Map mission-critical paths, then place taps.",
+              "tooling": "",
+              "expect": "Coverage diagram.",
+              "source": "seed"
+            }
+          ],
+          "original": null,
+          "assignees": [],
+          "stepsSource": "authored",
+          "ttpText": "T1040"
+        }
+      ]
+    },
+    {
+      "key": "P1",
+      "name": "Phase 1 \u2014 Hunt",
+      "intent": "Look for the adversary on the terrain you just mapped.",
+      "source": "seed",
+      "tasks": [
+        {
+          "key": "EX-p1-spray",
+          "title": "Hunt for password spraying",
+          "intent": "Many accounts, one password, low and slow. The audit gap that hides it is 4625 not being collected.",
+          "source": "seed",
+          "priority": "high",
+          "team": "",
+          "mitre": [
+            "T1110.003"
+          ],
+          "tools": [],
+          "dataSources": [
+            "Windows Security 4625",
+            "4740"
+          ],
+          "commands": [],
+          "terrain": [],
+          "references": [],
+          "evidenceExpected": "A single source authenticating against many accounts in a short window.",
+          "analysis": "",
+          "doNext": "",
+          "steps": [
+            {
+              "text": "Confirm 4625 is actually being collected before concluding anything.",
+              "tooling": "SIEM",
+              "expect": "A count per DC. A zero is an audit gap, not a clean result.",
+              "source": "seed"
+            },
+            {
+              "text": "Group failures by source, then by account count.",
+              "tooling": "SIEM",
+              "expect": "One source, many accounts, few attempts each.",
+              "source": "seed"
+            }
+          ],
+          "original": null,
+          "assignees": [],
+          "stepsSource": "authored",
+          "ttpText": "T1110.003"
+        },
+        {
+          "key": "EX-p1-persist",
+          "title": "Hunt for scheduled-task persistence",
+          "intent": "Scheduled tasks survive reboots and rarely get reviewed.",
+          "source": "seed",
+          "priority": "normal",
+          "team": "",
+          "mitre": [
+            "T1053.005"
+          ],
+          "tools": [],
+          "dataSources": [
+            "Windows Security 4698",
+            "Task Scheduler"
+          ],
+          "commands": [],
+          "terrain": [],
+          "references": [],
+          "evidenceExpected": "A task nobody in the estate can account for.",
+          "analysis": "",
+          "doNext": "",
+          "steps": [
+            {
+              "text": "Baseline scheduled tasks across the estate, then diff.",
+              "tooling": "Characterization tab",
+              "expect": "A delta, not a wall of rows.",
+              "source": "seed"
+            }
+          ],
+          "original": null,
+          "assignees": [],
+          "stepsSource": "authored",
+          "ttpText": "T1053.005"
+        }
+      ]
+    }
+  ]
+}

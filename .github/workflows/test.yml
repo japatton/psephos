@@ -1,0 +1,167 @@
+# CI for Psephos.
+#
+# The project has no dependencies and no build step, so there is nothing to
+# install and nothing to cache — the whole of CI is "does it run, and does it
+# still refuse what it is supposed to refuse".
+#
+# Jobs run in images that already carry what they need rather than fetching a
+# setup action: a self-hosted runner may have no route to an action registry,
+# and Node 24 is a hard requirement of the code rather than a preference. The
+# same file runs unchanged on Forgejo Actions, which is where it was written.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    container:
+      image: node:24-bookworm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versions
+        run: node --version && git --version
+
+      # Several invariants shell out to git ls-files, and a checkout owned by
+      # another uid is not a trusted directory for the git inside a container.
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Test suite
+        run: npm test
+
+  # The views, executed in a browser.
+  #
+  # Its own job rather than a step in `suite`, so the ordinary run stays fast and
+  # browser-free: a chromium that fails to install should fail this and nothing
+  # else. The smoke tests skip when no browser is present, so they simply do not
+  # run in the other jobs.
+  #
+  # This is the one place the "images that already carry what they need" rule is
+  # bent, because no published image carries both Node 24 and a browser. Nineteen
+  # seconds of apt against Debian's own mirrors is a smaller dependency than an
+  # image built and hosted for this, and it was measured on the runner host
+  # rather than assumed.
+  views:
+    runs-on: ubuntu-latest
+    container:
+      image: node:24-bookworm
+    steps:
+      - uses: actions/checkout@v4
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # /usr/bin/chromium, which is already in the list tools/cdp.mjs looks in.
+      - name: Install a browser
+        run: |
+          set -e
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends chromium
+          chromium --version
+
+      # Fails rather than skips here. Skipping is right on a laptop without a
+      # browser; in the job that exists to run these, a skip is the test quietly
+      # not happening, which is the state this job was added to end.
+      - name: The views actually render
+        run: |
+          set -e
+          node --import ./test/_env.js --test test/views-smoke.test.js | tee views.log
+          grep -q 'skipped 0' views.log
+
+  # A fresh clone has no mission profile. This is the path every new operator
+  # takes, and the one most easily broken by a change that passes locally only
+  # because this machine already has a profile on disk.
+  fresh-clone:
+    runs-on: ubuntu-latest
+    container:
+      image: node:24-bookworm
+    steps:
+      - uses: actions/checkout@v4
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: With no mission, comes up in setup mode
+        env:
+          HUNT_PORT: '8798'
+          HUNT_HOST: 127.0.0.1
+        run: |
+          set -e
+          node bin/serve.js > setup.log 2>&1 &
+          for _ in $(seq 1 40); do
+            grep -q 'operator' setup.log && break
+            sleep 0.25
+          done
+          cat setup.log
+          grep -q 'no mission yet' setup.log
+
+          # The wizard is served, and the application says plainly that it is
+          # not ready rather than answering about an estate that does not exist.
+          token=$(tr -d '[:space:]' < .hunt-token)
+          probe() {
+            node -e "fetch('http://127.0.0.1:8798'+process.argv[1],{headers:{authorization:'Bearer '+process.argv[2]}})
+              .then(async r=>console.log(r.status, (await r.text()).slice(0,60)))
+              .catch(()=>console.log('unreachable'))" "$1" "$token"
+          }
+          echo "GET /        -> $(probe /)"
+          echo "GET /api/state -> $(probe /api/state)"
+          probe / | grep -q '^200'
+          probe /api/state | grep -q '^503'
+
+      - name: Starts on the example profile
+        env:
+          HUNT_MISSION: example
+          HUNT_PORT: '8799'
+          HUNT_HOST: 127.0.0.1
+        run: |
+          set -e
+          node bin/serve.js > boot.log 2>&1 &
+          for _ in $(seq 1 40); do
+            grep -q 'Team tokens' boot.log && break
+            sleep 0.25
+          done
+          cat boot.log
+          grep -q 'mission    Example Engagement' boot.log
+          # The login page is the one unauthenticated route. Everything else
+          # answers 401, which is the posture the whole design rests on.
+          status=$(node -e "fetch('http://127.0.0.1:8799/api/state').then(r=>console.log(r.status)).catch(()=>console.log('unreachable'))")
+          echo "GET /api/state -> $status"
+          test "$status" = "401"
+
+  # The terrain survey and merge tools carry their own self-tests, and they are
+  # PowerShell.
+  #
+  # This runs in the same image as the other jobs rather than a PowerShell one,
+  # and installs pwsh from a pinned tarball. The obvious spelling — a
+  # mcr.microsoft.com image plus apt-get install git for the checkout — needs a
+  # second registry and a package mirror, and failed here while the other jobs
+  # passed, which points at container egress rather than at anything in the
+  # workflow. This way the job depends only on what those jobs already prove
+  # reachable.
+  powershell:
+    runs-on: ubuntu-latest
+    container:
+      image: node:24-bookworm
+    steps:
+      - uses: actions/checkout@v4
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install PowerShell
+        env:
+          PWSH_VERSION: 7.4.6
+        run: |
+          set -e
+          url="https://github.com/PowerShell/PowerShell/releases/download/v${PWSH_VERSION}/powershell-${PWSH_VERSION}-linux-x64.tar.gz"
+          mkdir -p /opt/pwsh
+          curl -fsSL --retry 3 "$url" | tar -xz -C /opt/pwsh
+          chmod +x /opt/pwsh/pwsh
+          ln -sf /opt/pwsh/pwsh /usr/local/bin/pwsh
+          pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
+
+      - name: Survey self-test
+        run: pwsh -NoProfile -File ./tools/Invoke-TerrainSurvey.ps1 -SelfTest
+
+      - name: Merge self-test
+        run: pwsh -NoProfile -File ./tools/Merge-Terrain.ps1 -SelfTest

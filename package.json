@@ -1,0 +1,16 @@
+{
+  "name": "psephos",
+  "version": "0.1.0",
+  "description": "Defender-themed cyber hunt workspace: Claude proposes findings, a human adjudicates them, and a live network map and timeline render the result",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Jason Patton",
+  "repository": "github:japatton/psephos",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node bin/serve.js",
+    "test": "node --import ./test/_env.js --test \"test/*.test.js\""
+  }
+}

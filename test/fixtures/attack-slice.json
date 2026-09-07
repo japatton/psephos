@@ -1,0 +1,39 @@
+{
+  "type": "bundle",
+  "objects": [
+    { "type": "x-mitre-collection", "x_mitre_version": "17.1", "name": "Enterprise ATT&CK" },
+    { "type": "attack-pattern", "id": "attack-pattern--live", "name": "Scheduled Task",
+      "description": "Adversaries may abuse task scheduling.\nSecond paragraph ignored.",
+      "x_mitre_is_subtechnique": true, "x_mitre_platforms": ["Windows"],
+      "kill_chain_phases": [{ "kill_chain_name": "mitre-attack", "phase_name": "persistence" }],
+      "external_references": [{ "source_name": "mitre-attack", "external_id": "T1053.005" }] },
+    { "type": "attack-pattern", "id": "attack-pattern--parent", "name": "Scheduled Task/Job",
+      "description": "Parent technique.", "x_mitre_platforms": ["Windows", "Linux"],
+      "kill_chain_phases": [{ "kill_chain_name": "mitre-attack", "phase_name": "persistence" }],
+      "external_references": [{ "source_name": "mitre-attack", "external_id": "T1053" }] },
+    { "type": "attack-pattern", "id": "attack-pattern--dead", "name": "Deprecated Thing",
+      "x_mitre_deprecated": true, "description": "Gone.",
+      "external_references": [{ "source_name": "mitre-attack", "external_id": "T9998" }] },
+    { "type": "attack-pattern", "id": "attack-pattern--revoked", "name": "Revoked Thing",
+      "revoked": true, "description": "Gone.",
+      "external_references": [{ "source_name": "mitre-attack", "external_id": "T9999" }] },
+    { "type": "attack-pattern", "id": "attack-pattern--longdesc", "name": "Long Description Thing",
+      "description": "Adversaries may leverage extremely long identifiers when naming scheduled tasks so that defenders scanning task names must read through unusually verbose descriptions that exceed the typical display width used across dashboards without truncation applied consistently and thus produce misleading summaries for analysts reviewing them quickly during triage windows.\nSecond paragraph ignored.",
+      "x_mitre_platforms": ["Windows"],
+      "kill_chain_phases": [{ "kill_chain_name": "mitre-attack", "phase_name": "persistence" }],
+      "external_references": [{ "source_name": "mitre-attack", "external_id": "T1600" }] },
+    { "type": "x-mitre-log-source", "id": "log--sec", "name": "WinEventLog:Security" },
+    { "type": "x-mitre-log-source", "id": "log--sys", "name": "WinEventLog:Sysmon" },
+    { "type": "x-mitre-analytic", "id": "analytic--1", "name": "Analytic 1221",
+      "x_mitre_log_source_references": [
+        { "x_mitre_data_component_ref": "log--sec" },
+        { "x_mitre_data_component_ref": "log--sys" },
+        { "x_mitre_data_component_ref": "log--sec" }
+      ] },
+    { "type": "x-mitre-detection-strategy", "id": "strat--1",
+      "name": "Detection of Suspicious Scheduled Task Creation",
+      "x_mitre_analytic_refs": ["analytic--1"] },
+    { "type": "relationship", "relationship_type": "detects",
+      "source_ref": "strat--1", "target_ref": "attack-pattern--live" }
+  ]
+}

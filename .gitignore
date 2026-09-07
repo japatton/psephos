@@ -1,0 +1,48 @@
+# Runtime state. Everything the server writes while it runs lives under data/:
+# the SQLite store, the live plan the team edits through the UI, survey output,
+# and the backups. None of it is source, and the store holds every member token
+# in plain text alongside every finding and uploaded file.
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# The operator token, generated on first start. Anyone holding it can read the
+# whole case file and spend the Claude quota.
+.hunt-token
+.env
+
+# Logs are runtime output, and the startup banner prints every team token into
+# whichever one the server was redirected to.
+*.log
+
+# Hand-made transfer bundles. tools.zip carried terrain/ and tools/ to the
+# range as a copy, and went stale the moment either changed. Build it when it
+# is needed; do not track a second copy of tracked source.
+*.zip
+
+# Mission profiles: terrain, plan seed, roster and briefing for one engagement.
+# A network map and a team list are not source, and this repository gets
+# pushed. missions/example/ is committed so a fresh clone starts and the tests
+# have terrain to read; every real engagement stays on the machine running it.
+missions/*
+!missions/example/
+
+# One engagement's assertions are that engagement's data. test/mission-<code>
+# .test.js asserts facts about a specific profile and skips where the profile
+# is absent, so it belongs beside the profile rather than in a shared repo.
+test/mission-*.test.js
+
+node_modules/
+
+# Agent tooling. Local settings and caches from Claude Code and its plugins;
+# .claude/settings.local.json in particular is per-machine and often holds
+# paths from somebody's home directory.
+.claude/
+.superpowers/
+
+# Editor and OS droppings.
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

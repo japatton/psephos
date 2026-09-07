@@ -1,0 +1,1081 @@
+/* Defender theme. Palette carried over from the analyst's existing
+   reference pages so this tool sits alongside them rather than clashing. */
+:root {
+  /*
+    Taken from the logo: the cyan of the P, the magenta of the shield.
+
+    The ground is not pure #000. Saturated neon on true black halates — the
+    glow bleeds and thin type furs at the edges — and this is a screen analysts
+    read for hours at a time. #05070d reads as black beside the logo and stops
+    the bloom.
+  */
+  --bg: #05070d;
+  --panel: #0b1018;
+  --panel-2: #121a26;
+  --line: #1b2636;
+  --line-2: #2b3a52;
+
+  --text: #e6f3ff;
+  --muted: #7f93ad;
+  --dim: #56667e;
+
+  /* Brand. Chrome only — see the note on the verdict triad below. */
+  --accent: #2de2ff;
+  --brand: #ff2d95;
+
+  /*
+    Verdicts, and the one rule that matters in this file.
+
+    On the Network Map the node fill is the *only* carrier of a host's verdict —
+    colorFor() in views/map.js returns these and nothing else distinguishes a
+    confirmed host from a cleared one. So these three have to stay apart from
+    each other and from the two brand hues.
+
+    Kept as a traffic light because that convention is read instantly and
+    correctly by everyone, and brightened for the dark ground rather than
+    re-hued. The separation from the brand is bought by placement instead:
+    magenta and cyan are never used inside the map, the records table state
+    column, or anywhere else a colour means a judgement. Brand colours live in
+    the chrome. If that rule is broken, --brand at 330° and --bad at 4° are
+    close enough on black to be misread, and the thing being misread is whether
+    a host is compromised.
+  */
+  --ok: #2bff88;
+  --warn: #ffc53d;
+  --bad: #ff3b30;
+  --purple: #b07cff;
+  /*
+    A blue for a fact that is not a judgement. Presence — did this address
+    answer — is observation, not adjudication, and the one presence value that
+    needed a positive hue was borrowing --accent: brand cyan, inside the host
+    table, one column from the verdict. That is the misreading the note above
+    exists to prevent, so this is a hue of its own rather than a shade of
+    something that already means something.
+  */
+  --fact: #58a6ff;
+
+  --mono: ui-monospace, "Cascadia Mono", SFMono-Regular, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.marking {
+  background: color-mix(in srgb, var(--warn) 20%, var(--panel)); color: var(--warn); text-align: center;
+  padding: 5px; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+}
+
+/* --- top bar ------------------------------------------------------------ */
+.topbar {
+  display: flex; align-items: center; gap: 24px;
+  padding: 0 20px; height: 52px;
+  background: linear-gradient(180deg, var(--panel), var(--bg));
+  border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 40;
+}
+/* The logo's rule under the wordmark, as a hairline under the bar. Decorative
+   and deliberately dim: the topbar should frame the work, not compete with it. */
+.topbar::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+  background: linear-gradient(90deg,
+    transparent, color-mix(in srgb, var(--accent) 55%, transparent) 25%,
+    color-mix(in srgb, var(--brand) 55%, transparent) 75%, transparent);
+  pointer-events: none;
+}
+/*
+  The wordmark, carrying the logo's own gradient: cyan at the P, magenta by the
+  end. Chrome, not data — this is the one place the two brand hues sit together,
+  and it is nowhere near anything that means a verdict.
+*/
+.brand {
+  font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  font-size: 15px;
+  background: linear-gradient(100deg, var(--accent) 10%, var(--brand) 90%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  /* A fallback for anything that cannot clip a gradient to text: it inherits
+     --accent rather than rendering an invisible wordmark. */
+  -webkit-text-fill-color: transparent;
+}
+@supports not (background-clip: text) {
+  .brand { color: var(--accent); -webkit-text-fill-color: currentColor; }
+}
+.topbar nav { display: flex; gap: 4px; flex: 1; }
+.topbar nav a {
+  color: var(--muted); text-decoration: none; font-size: 13px;
+  padding: 6px 12px; border-radius: 6px;
+}
+.topbar nav a:hover { color: var(--text); background: var(--panel-2); }
+.topbar nav a.active { color: var(--text); background: var(--panel-2); box-shadow: inset 0 -2px 0 var(--accent); }
+.topbar-right { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); }
+.conn { color: var(--ok); font-size: 10px; }
+.conn.down { color: var(--bad); }
+.pill {
+  background: color-mix(in srgb, var(--warn) 26%, var(--panel)); color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 34%, var(--panel));
+  border-radius: 11px; padding: 2px 10px; font-size: 11px; font-weight: 600;
+}
+
+main { padding: 18px 20px 60px; }
+.loading { color: var(--muted); padding: 40px; text-align: center; }
+h2.section { font-size: 15px; font-weight: 600; margin: 0 0 12px; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--mono); font-size: 12px; }
+.hint { color: var(--dim); font-size: 11.5px; margin: 4px 0 0; }
+
+/* --- controls ----------------------------------------------------------- */
+button, .btn {
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line-2);
+  border-radius: 6px; padding: 6px 12px; font: inherit; font-size: 12.5px; cursor: pointer;
+}
+button:hover { border-color: var(--muted); }
+button.primary { background: color-mix(in srgb, var(--accent) 70%, black); border-color: color-mix(in srgb, var(--accent) 70%, black); color: #fff; }
+button.primary:hover { background: #2a7cf7; }
+button.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 24%, var(--panel)); }
+button.ok:hover { background: #12291a; }
+button.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 34%, var(--panel)); }
+button.bad:hover { background: #2b1414; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+
+input, select, textarea {
+  background: var(--bg); border: 1px solid var(--line-2); border-radius: 6px;
+  color: var(--text); padding: 7px 10px; font: inherit; font-size: 13px; width: 100%;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+        color: var(--muted); margin: 12px 0 4px; }
+
+.bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.bar > * { flex: 0 0 auto; }
+.bar .grow { flex: 1 1 200px; }
+/*
+  Controls are 100% wide by default, which is right in a form and wrong in a
+  bar: every select claimed a line of its own, so four controls cost four rows
+  of vertical space before a single row of data. Capped rather than free so a
+  generated baseline name cannot push the rest of the bar off the end.
+*/
+.bar select, .bar input[type="checkbox"], .bar input:not(.grow) { width: auto; }
+.bar select { max-width: 250px; }
+.bar .sep { color: var(--line-2); }
+
+/* --- login -------------------------------------------------------------- */
+.login-body { display: flex; flex-direction: column; }
+.login-wrap { display: grid; place-items: center; flex: 1; padding: 60px 20px; }
+.login-card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  padding: 28px 30px; width: 100%; max-width: 380px;
+}
+.login-card h1 { margin: 0 0 6px; font-size: 20px; }
+.login-card button { width: 100%; margin-top: 18px; background: color-mix(in srgb, var(--accent) 70%, black); border-color: color-mix(in srgb, var(--accent) 70%, black); color: #fff; padding: 9px; }
+.err { color: var(--bad); font-size: 12.5px; margin-top: 10px; }
+
+/* --- tables ------------------------------------------------------------- */
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th {
+  text-align: left; color: var(--muted); font-weight: 600; font-size: 10.5px;
+  text-transform: uppercase; letter-spacing: .05em; padding: 6px 8px;
+  border-bottom: 1px solid var(--line-2); background: var(--bg);
+}
+
+/* Sticky headers are opt-in, and the table scrolls inside its own box.
+
+   Two bugs lived here. A globally sticky th detached in every small nested
+   table: the timeline's undated-record tray drew its header floating between
+   two rows, covering one. And `top: 52px` never worked as intended anyway —
+   .table-wrap sets overflow-x, which makes it a scroll container, so sticky
+   resolved against the wrapper rather than the viewport and the header pinned
+   at y=0 behind the topbar with rows disappearing under it.
+
+   Pinning to the wrapper's own top is unambiguous: the body scrolls within the
+   box and the header never interacts with the page chrome. */
+.table-wrap.sticky { max-height: calc(100vh - 210px); overflow: auto; }
+.table-wrap.sticky th {
+  position: sticky; top: 0; z-index: 2;
+  /* Opaque, or rows scroll visibly through the header. */
+  background: var(--bg); box-shadow: inset 0 -1px 0 var(--line-2);
+}
+td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:hover td { background: var(--panel); }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+.clip { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* --- state colour ------------------------------------------------------- */
+.s-pending { color: var(--warn); }
+.s-filed   { color: var(--ok); }
+.s-denied  { color: var(--dim); text-decoration: line-through; }
+.v-confirmed { color: var(--bad); }
+.v-suspected { color: var(--warn); }
+.v-cleared   { color: var(--ok); }
+.v-unknown   { color: var(--dim); }
+.tier-approximate { border-bottom: 1px dashed var(--warn); }
+
+/* Presence: whether a host answered, kept visually distinct from verdict,
+   which is whether it is compromised. */
+.p-alive-unidentified { color: var(--warn); font-weight: 600; }
+.p-alive-named        { color: var(--fact); }
+.p-relocated          { color: var(--bad); }
+.p-unanswered         { color: var(--dim); }
+.p-infrastructure     { color: var(--muted); }
+.p-evidence-only      { color: var(--purple); }
+.p-confirmed          { color: var(--ok); }
+.p-unsurveyed         { color: var(--dim); font-style: italic; }
+.p-excluded           { color: var(--dim); font-style: italic; }
+.p-out-of-scope       { color: var(--dim); font-style: italic; }
+.tier-unplaceable { color: var(--dim); font-style: italic; }
+
+/* --- cards -------------------------------------------------------------- */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 13px 15px;
+}
+.card h3 { margin: 0 0 4px; font-size: 13.5px; font-weight: 600; }
+.card.clickable { cursor: pointer; }
+.card.clickable:hover { border-color: var(--line-2); }
+
+/* --- sessions ----------------------------------------------------------- */
+.session-layout { display: grid; grid-template-columns: 240px 1fr 320px; gap: 14px; height: calc(100vh - 150px); }
+.session-list, .chat, .rail {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 9px;
+  overflow-y: auto; padding: 12px;
+}
+.chat { display: flex; flex-direction: column; padding: 0; }
+.transcript { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.msg { max-width: 78ch; }
+.msg .role { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin-bottom: 3px; }
+.msg.user .bubble { background: var(--panel-2); }
+.msg .bubble { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 13px; white-space: pre-wrap; }
+.msg.system .bubble { border-color: color-mix(in srgb, var(--bad) 34%, var(--panel)); color: var(--bad); }
+.msg.tool .bubble { border-color: #2d3a1f; color: var(--ok); font-size: 12px; font-family: var(--mono); }
+.composer { border-top: 1px solid var(--line); padding: 12px; display: flex; gap: 8px; }
+.composer textarea { resize: none; height: 62px; }
+.session-item { padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 12.5px; }
+.session-item:hover { background: var(--panel-2); }
+.session-item.active { background: var(--panel-2); box-shadow: inset 2px 0 0 var(--accent); }
+.session-item .meta { color: var(--dim); font-size: 11px; }
+.cand {
+  border: 1px solid #4a3a12; background: #1e1a10; border-radius: 8px; padding: 10px; margin-bottom: 10px;
+}
+.cand h4 { margin: 0 0 6px; font-size: 12.5px; }
+.cand .row { display: flex; gap: 6px; margin-top: 8px; }
+.cand .row button { flex: 1; padding: 5px; font-size: 12px; }
+.cand dl { margin: 0; font-size: 11.5px; display: grid; grid-template-columns: 82px 1fr; gap: 2px 8px; }
+.cand dt { color: var(--dim); }
+.cand dd { margin: 0; word-break: break-word; }
+.cand select { margin-top: 8px; font-size: 12px; padding: 5px 8px; }
+
+/* --- team roster and modes ---------------------------------------------- */
+.roster-team {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--dim); margin: 12px 0 4px; padding-left: 2px;
+}
+.roster-team:first-child { margin-top: 0; }
+.you {
+  background: #123a1c; color: var(--ok); border-radius: 9px;
+  padding: 0 6px; font-size: 10px; margin-left: 4px;
+}
+.ro {
+  background: var(--panel-2); color: var(--muted); border-radius: 9px;
+  padding: 1px 8px; font-size: 10.5px; margin-left: auto;
+}
+.working { color: var(--warn); font-size: 10.5px; margin-left: 4px; }
+.chat-head {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 11px 16px; border-bottom: 1px solid var(--line); font-size: 13px;
+}
+.composer { flex-direction: column; gap: 8px; align-items: stretch; }
+.composer.readonly {
+  color: var(--muted); font-size: 12.5px; font-style: italic; display: block;
+}
+.composer-modes { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.composer-row { display: flex; gap: 8px; }
+.composer-row textarea { flex: 1; }
+button.mode { border-radius: 14px; padding: 4px 14px; font-size: 12px; }
+button.mode.on { background: color-mix(in srgb, var(--accent) 70%, black); border-color: color-mix(in srgb, var(--accent) 70%, black); color: #fff; font-weight: 600; }
+.attach {
+  margin: 0; text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--muted);
+  border: 1px solid var(--line-2); border-radius: 14px; padding: 4px 12px; cursor: pointer;
+}
+.attach:hover { border-color: var(--muted); color: var(--text); }
+.mode-hint { color: var(--dim); font-size: 11.5px; }
+
+/* --- map ---------------------------------------------------------------- */
+.map-wrap { position: relative; background: var(--panel); border: 1px solid var(--line);
+            border-radius: 9px; overflow: hidden; }
+#graph { width: 100%; height: calc(100vh - 220px); display: block; cursor: grab; }
+#graph:active { cursor: grabbing; }
+.legend {
+  position: absolute; right: 12px; bottom: 12px; background: var(--bg)d9; backdrop-filter: blur(6px);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 11.5px; color: var(--muted);
+}
+.legend div { display: flex; align-items: center; gap: 7px; margin: 3px 0; }
+.legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.node-label { font-size: 10px; fill: var(--muted); pointer-events: none; user-select: none; }
+.enclave-label { font-size: 13px; font-weight: 600; fill: #33404f; pointer-events: none; user-select: none; }
+
+/* --- timeline ----------------------------------------------------------- */
+.tl-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 12px; }
+#tl { width: 100%; display: block; }
+.lane-label { font-size: 11px; fill: var(--muted); }
+.tl-axis text { fill: var(--dim); font-size: 10.5px; }
+.tl-axis line, .tl-axis path { stroke: var(--line-2); }
+.tray { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+/* Bounded so a long list of undated records scrolls itself instead of
+   pushing the rest of the page out of view. */
+.tray .table-wrap { max-height: 320px; overflow: auto; }
+.tray summary { cursor: pointer; color: var(--warn); font-size: 12.5px; }
+
+/* --- drawer ------------------------------------------------------------- */
+.drawer {
+  position: fixed; top: 0; right: 0; width: min(560px, 94vw); height: 100vh;
+  background: var(--panel); border-left: 1px solid var(--line-2);
+  box-shadow: -18px 0 44px #0008; z-index: 60; overflow-y: auto; padding: 20px 22px;
+}
+.drawer h2 { margin: 0 0 2px; font-size: 17px; }
+.drawer .close { position: absolute; top: 14px; right: 16px; background: none; border: none; color: var(--muted); font-size: 20px; }
+.drawer dl { display: grid; grid-template-columns: 128px 1fr; gap: 4px 12px; font-size: 12.5px; margin: 14px 0; }
+.drawer dt { color: var(--muted); }
+.drawer dd { margin: 0; word-break: break-word; }
+.verdicts { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 18px; }
+.rec-item { border: 1px solid var(--line); border-radius: 7px; padding: 10px; margin-bottom: 9px; background: var(--panel-2); }
+.rec-item .top { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; color: var(--muted); }
+
+.toast {
+  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+  background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 8px;
+  padding: 9px 16px; font-size: 12.5px; z-index: 80;
+}
+.toast.bad { border-color: color-mix(in srgb, var(--bad) 34%, var(--panel)); color: var(--bad); }
+
+@media (max-width: 1100px) {
+  .session-layout { grid-template-columns: 1fr; height: auto; }
+}
+
+/* --- hunt plan ----------------------------------------------------------- */
+.phase { margin-bottom: 26px; }
+.phase-intent {
+  color: var(--muted); font-size: 12.5px; margin: 0 0 12px; max-width: 90ch;
+  border-left: 2px solid var(--line-2); padding-left: 10px;
+}
+.task {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; margin-bottom: 8px; position: relative; overflow: hidden;
+}
+.task.complete { opacity: .62; }
+.task.blocked { border-color: color-mix(in srgb, var(--bad) 34%, var(--panel)); }
+.task-head { display: flex; align-items: center; gap: 10px; padding: 10px 13px; }
+.task-title { flex: 1; min-width: 0; }
+.task-sub { color: var(--dim); font-size: 11.5px; margin-top: 2px; }
+.task-sub .you { color: var(--ok); font-weight: 600; }
+.unassigned { color: var(--warn); }
+.tick {
+  width: 22px; height: 22px; border-radius: 5px; padding: 0; flex: 0 0 auto;
+  font-size: 13px; line-height: 1; color: var(--ok);
+}
+.tick.done { background: #12291a; border-color: color-mix(in srgb, var(--ok) 24%, var(--panel)); }
+.task select.status { width: auto; font-size: 11.5px; padding: 3px 8px; }
+.expand { padding: 3px 9px; }
+.pri { background: color-mix(in srgb, var(--warn) 26%, var(--panel)); color: var(--warn); border-radius: 9px; padding: 0 7px; font-size: 10px; }
+.src-exp { background: #1d2f45; color: var(--accent); border-radius: 9px; padding: 0 7px; font-size: 10px; }
+.src-std { background: var(--panel-2); color: var(--dim); border-radius: 9px; padding: 0 7px; font-size: 10px; }
+/* A subtle marker so an analyst can find their own outstanding work fast. */
+.mine-flag { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--ok); }
+
+.task-detail { border-top: 1px solid var(--line); padding: 12px 15px 16px; }
+.task-detail .intent { color: var(--text); font-size: 12.5px; margin: 0 0 10px; max-width: 88ch; }
+/*
+  MITRE's own description, shown only when a drawn stub has no authored intent
+  to put in .intent's place. Kept visually apart from it on purpose — a dashed
+  rule and a muted label, so nobody mistakes this paragraph for something a
+  colleague wrote about this engagement.
+*/
+.bank-desc-label { margin: 0 0 4px; max-width: 88ch; }
+.bank-desc {
+  color: var(--muted); font-size: 12.5px; font-style: italic; margin: 0 0 10px;
+  max-width: 88ch; padding-left: 10px; border-left: 2px dashed var(--line-2);
+}
+.chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+.chip {
+  background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 10px;
+  padding: 1px 8px; font-size: 11px; color: var(--muted);
+}
+.chip.mitre { color: var(--purple); border-color: color-mix(in srgb, var(--purple) 26%, var(--panel)); }
+ol.steps { margin: 6px 0 4px; padding-left: 20px; }
+ol.steps li { margin-bottom: 9px; font-size: 12.5px; max-width: 92ch; }
+.step-meta { margin-top: 3px; display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; }
+.step-meta .tool { color: var(--accent); font-family: var(--mono); }
+.step-meta .expect { color: var(--dim); font-style: italic; }
+.small { font-size: 12px; color: var(--muted); margin: 2px 0 0; max-width: 90ch; }
+details.orig { margin-top: 12px; }
+details.orig summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+details.orig dl { display: grid; grid-template-columns: 110px 1fr; gap: 3px 10px; font-size: 11.5px; margin-top: 8px; }
+details.orig dt { color: var(--dim); text-transform: capitalize; }
+details.orig dd { margin: 0; white-space: pre-wrap; }
+.assign { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.assign .who {
+  display: flex; align-items: center; gap: 5px; margin: 0;
+  text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--text);
+}
+.assign .who input { width: auto; }
+.history { font-size: 11.5px; }
+.hist-row { display: grid; grid-template-columns: 130px 90px 1fr; gap: 8px; padding: 2px 0; color: var(--muted); }
+.hist-row .reset { color: var(--warn); }
+
+/* --- comms --------------------------------------------------------------- */
+.comms-layout { display: grid; grid-template-columns: 250px 1fr; gap: 14px; height: calc(100vh - 150px); }
+.unread {
+  background: color-mix(in srgb, var(--accent) 70%, black); color: #fff; border-radius: 9px; padding: 0 6px;
+  font-size: 10px; margin-left: 5px; font-weight: 600;
+}
+.chat-msg { padding: 7px 0; border-bottom: 1px solid #171d26; }
+.chat-msg:last-child { border-bottom: 0; }
+.chat-msg.own .chat-meta b { color: var(--ok); }
+/* A message that tags you should be findable by scrolling, not by reading. */
+.chat-msg.tagged { border-left: 2px solid var(--warn); padding-left: 9px; margin-left: -11px; }
+.chat-meta { display: flex; gap: 8px; align-items: baseline; font-size: 11.5px; margin-bottom: 2px; }
+.chat-body { font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+.mention { color: var(--accent); background: #14243a; border-radius: 3px; padding: 0 3px; }
+.mention.me { color: var(--warn); background: #2f2510; font-weight: 600; }
+.file-card {
+  display: inline-flex; flex-direction: column; gap: 1px; margin-top: 6px;
+  background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 7px;
+  padding: 7px 11px; text-decoration: none; color: var(--text); max-width: 380px;
+}
+.file-card:hover { border-color: var(--accent); }
+.file-card .fname { font-size: 12.5px; }
+.file-card .fmeta { font-size: 10.5px; color: var(--dim); font-family: var(--mono); }
+.pending-file {
+  background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 12px;
+  padding: 2px 10px; font-size: 11.5px; color: var(--muted);
+}
+.pending-file button { padding: 0 6px; font-size: 11px; margin-left: 6px; }
+.mention-hint { display: flex; flex-wrap: wrap; gap: 4px; }
+button.mtag {
+  padding: 1px 8px; font-size: 11px; border-radius: 10px;
+  color: var(--muted); background: transparent;
+}
+button.mtag:hover { color: var(--accent); border-color: var(--accent); }
+@media (max-width: 1000px) { .comms-layout { grid-template-columns: 1fr; height: auto; } }
+
+.signout {
+  padding: 2px 9px; font-size: 11px; color: var(--muted);
+  background: transparent; border-color: var(--line-2);
+}
+.signout:hover { color: var(--text); border-color: var(--muted); }
+.who.operator { color: var(--warn); }
+.operator-note {
+  background: color-mix(in srgb, var(--warn) 20%, var(--panel)); border: 1px solid color-mix(in srgb, var(--warn) 34%, var(--panel)); color: var(--warn);
+  border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 12.5px;
+}
+
+/* --- plan authoring ------------------------------------------------------ */
+.src-local  { background: #2a2340; color: var(--purple); border-radius: 9px; padding: 0 7px; font-size: 10px; }
+.src-edited { background: color-mix(in srgb, var(--accent) 20%, var(--panel)); color: var(--accent); border-radius: 9px; padding: 0 7px; font-size: 10px; }
+/*
+  Bank provenance, and the two tiers the design spec insists must not read
+  alike: a stub is a prompt nobody has looked at yet, and it is the state a
+  briefing most needs surfaced, so it gets the loud dashed outline rather than
+  a filled pill — a drawn task with authored depth is a quieter, solid badge,
+  same hue as .cov-authored so the two views agree on what "authored" looks
+  like. Neither uses --ok/--warn/--bad: a task's provenance is not a verdict.
+*/
+.src-bank {
+  background: color-mix(in srgb, var(--purple) 24%, var(--panel)); color: var(--purple);
+  border-radius: 9px; padding: 0 7px; font-size: 10px;
+}
+/*
+  Between the two. A drafted entry is more than a stub and less than tradecraft,
+  and the badge has to carry that without reaching for the verdict triad — the
+  dashed rule is the same "provisional" signal .tier-approximate already uses.
+*/
+.src-bank-draft {
+  font-size: 10px; padding: 0 6px; border-radius: 9px; margin-left: 6px;
+  color: var(--purple); border: 1px dashed color-mix(in srgb, var(--purple) 55%, var(--line));
+  background: color-mix(in srgb, var(--purple) 10%, var(--panel));
+}
+.cov-drafted { font-size: 12.5px; color: var(--warn); margin: 4px 0; }
+
+/*
+  Solid where the draft badge is dashed: reviewed is a step up from provisional
+  and a step short of the plain 'bank' badge, which claims this estate.
+*/
+.src-bank-reviewed {
+  font-size: 10px; padding: 0 6px; border-radius: 9px; margin-left: 6px;
+  color: var(--purple); border: 1px solid color-mix(in srgb, var(--purple) 45%, var(--line));
+  background: color-mix(in srgb, var(--purple) 14%, var(--panel));
+}
+
+.src-bank-stub {
+  background: transparent; border: 1px dashed var(--purple); color: var(--purple);
+  border-radius: 9px; padding: 0 6px; font-size: 10px;
+}
+
+button.edit { padding: 2px 8px; font-size: 12px; opacity: .55; }
+button.edit:hover { opacity: 1; }
+button.addtask { margin-left: auto; font-size: 11px; padding: 2px 9px; font-weight: 400; text-transform: none; }
+
+.task.adding { border-color: var(--accent); }
+
+.task-form { padding: 12px 14px 14px; border-top: 1px solid var(--line); }
+.task-form-grid { display: grid; grid-template-columns: 150px 1fr; gap: 8px 12px; align-items: start; }
+.task-form-grid > label {
+  margin: 0; padding-top: 7px; font-size: 11px; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--dim);
+}
+.task-form-grid > label .hint { display: block; text-transform: none; letter-spacing: 0; font-size: 10.5px; }
+.task-form textarea { resize: vertical; width: 100%; }
+.task-form .row { display: flex; gap: 8px; align-items: center; }
+.task-form .row select { flex: 0 1 auto; }
+.key-fixed { padding-top: 7px; font-size: 12.5px; }
+.key-fixed .hint { margin-left: 8px; font-size: 10.5px; }
+
+.newphase-fields { display: grid; gap: 6px; padding: 10px; border: 1px dashed var(--line); border-radius: 7px; }
+
+.steps-label {
+  display: block; margin: 16px 0 6px; font-size: 11px; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--dim);
+}
+.step-edit { border: 1px solid var(--line); border-radius: 7px; padding: 8px; margin-bottom: 7px; background: #0f1620; }
+.step-edit-head { display: flex; align-items: center; gap: 5px; margin-bottom: 6px; }
+.step-edit-head button { padding: 0 7px; font-size: 12px; line-height: 1.7; }
+.step-edit-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+.task-form-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+
+@media (max-width: 780px) {
+  .task-form-grid { grid-template-columns: 1fr; }
+  .task-form-grid > label { padding-top: 4px; }
+  .step-edit-meta { grid-template-columns: 1fr; }
+}
+
+/* --- characterization ---------------------------------------------------- */
+.chg-new     { background: color-mix(in srgb, var(--warn) 26%, var(--panel)); color: var(--warn); border-radius: 9px; padding: 1px 7px; font-size: 10px; font-weight: 600; }
+.chg-gone    { background: color-mix(in srgb, var(--bad) 22%, var(--panel)); color: var(--bad);  border-radius: 9px; padding: 1px 7px; font-size: 10px; font-weight: 600; }
+.chg-changed { background: #1d2f45; color: var(--accent); border-radius: 9px; padding: 1px 7px; font-size: 10px; font-weight: 600; }
+.chg-base    { color: var(--dim); font-size: 10px; }
+
+td.rare { color: var(--warn); font-weight: 600; }
+tr.unconfident { opacity: .5; }
+tr.unconfident td:first-child::after { content: ' ?'; color: var(--dim); }
+
+.incomplete-warn {
+  margin: 10px 14px; padding: 9px 11px; font-size: 12.5px; line-height: 1.5;
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--panel)); border-left: 3px solid var(--warn);
+  border-radius: 7px; background: #211a0e; color: #d9c9a3;
+}
+
+input.charhost { width: 230px; font-size: 12px; padding: 3px 8px; }
+select.charsnap { max-width: 240px; font-size: 12px; padding: 3px 6px; }
+.comparing {
+  font-size: 11px; color: var(--dim); border-left: 1px solid var(--line);
+  padding-left: 10px; margin-left: 2px;
+}
+
+/* --- characterization coverage and diffs --------------------------------- */
+.snapbar { border-bottom: 1px dashed var(--line); }
+.collecting { font-size: 11px; color: var(--warn); background: color-mix(in srgb, var(--warn) 18%, var(--panel)); border-radius: 9px; padding: 1px 8px; }
+
+.coverage { margin: 10px 14px; border-radius: 7px; padding: 9px 11px; font-size: 12.5px; }
+.coverage-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 4px; }
+.coverage-head b { font-size: 12.5px; }
+/* Still collecting: neutral. A host that has not arrived yet is next in the
+   queue, not a finding, and alarming about it teaches people to ignore this. */
+.coverage-soft { border: 1px solid var(--line); background: #121821; color: var(--dim); }
+.coverage-hard { border: 1px solid color-mix(in srgb, var(--bad) 34%, var(--panel)); border-left: 3px solid var(--bad); background: #1d1214; }
+.coverage-info { border: 1px solid var(--line); background: #101720; }
+.coverage-row {
+  display: flex; gap: 10px; align-items: center; padding: 3px 0;
+  border-top: 1px solid rgba(255,255,255,.04);
+}
+.coverage-row select { font-size: 11.5px; padding: 2px 6px; }
+.coverage-row button { font-size: 11px; padding: 1px 8px; }
+
+button.rowexp { padding: 0 6px; font-size: 11px; opacity: .6; }
+button.rowexp:hover { opacity: 1; }
+tr.row-detail > td { background: #0f1620; padding: 10px 14px; }
+tr.stale td { opacity: .55; font-style: italic; }
+
+table.fielddiff { width: auto; font-size: 12px; }
+table.fielddiff th { font-size: 10.5px; color: var(--dim); }
+table.fielddiff td { padding: 3px 14px 3px 0; }
+table.fielddiff .was { color: var(--bad); text-decoration: line-through; opacity: .8; }
+table.fielddiff .now { color: var(--ok); }
+
+/* --- import panel -------------------------------------------------------- */
+.importer { border-bottom: 1px solid var(--line); padding-bottom: 12px; background: #101720; }
+.importer textarea { width: calc(100% - 28px); margin: 0 14px; resize: vertical; }
+.dropzone {
+  margin: 10px 14px; padding: 14px; border: 1px dashed var(--line); border-radius: 8px;
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12.5px;
+}
+.dropzone.over { border-color: var(--accent); background: #131d2b; }
+.importer .task-form-actions { padding: 0 14px; }
+
+.staged { margin: 12px 14px 0; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.staged-warn { border-color: color-mix(in srgb, var(--warn) 30%, var(--panel)); border-left: 3px solid var(--warn); }
+.staged-row { border-top: 1px solid rgba(255,255,255,.05); padding: 8px 0; }
+.staged-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.staged-meta { display: flex; gap: 8px; margin: 4px 0; flex-wrap: wrap; font-size: 11.5px; }
+input.staged-host { width: 220px; font-size: 12px; padding: 2px 7px; }
+.warnchip {
+  background: color-mix(in srgb, var(--warn) 18%, var(--panel)); color: var(--warn); border-radius: 9px;
+  padding: 1px 8px; font-size: 10.5px;
+}
+
+/* --- filters and corrections --------------------------------------------- */
+tr.filterrow th { padding: 3px 6px 6px; background: var(--panel); }
+tr.filterrow input {
+  width: 100%; min-width: 60px; font-size: 11px; padding: 2px 6px;
+  background: #0c1219; border-color: #232c38;
+}
+tr.filterrow button { padding: 1px 7px; font-size: 11px; }
+
+.fixform .task-form-grid { grid-template-columns: 150px 1fr; }
+.fixform .row { display: flex; gap: 8px; }
+.fixform .row .grow { flex: 1; }
+
+/* --- asset editing -------------------------------------------------------- */
+.hostedit { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+.hostedit .task-form-grid { grid-template-columns: 90px 1fr; gap: 6px 10px; }
+.hostedit .row { display: flex; gap: 6px; }
+.hostedit .row .grow { flex: 1; }
+.hostedit input, .hostedit select { font-size: 12px; padding: 3px 7px; }
+.pinchip {
+  margin-left: 7px; background: color-mix(in srgb, var(--accent) 20%, var(--panel)); color: var(--accent);
+  border-radius: 9px; padding: 0 7px; font-size: 10px; text-transform: none;
+}
+.pinchip.warn { background: color-mix(in srgb, var(--bad) 22%, var(--panel)); color: var(--bad); }
+.warnbtn { border-color: var(--warn); color: var(--warn); }
+.addhost, .unplaced-list {
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 12px 14px; margin: 0 0 10px;
+}
+.addhost .task-form-grid { grid-template-columns: 80px 1fr 80px 1fr; gap: 6px 10px; }
+.unplaced-row {
+  display: block; width: 100%; text-align: left; margin-bottom: 4px;
+  padding: 6px 9px; font-size: 12px;
+}
+.unplaced-row b { color: var(--warn); margin-right: 9px; }
+.unplaced-row span { color: var(--dim); }
+
+/* --- setup wizard --------------------------------------------------------- */
+.setup-body { display: block; padding: 0; }
+.wiz { max-width: 760px; margin: 0 auto; padding: 34px 22px 70px; }
+.wiz h1 { font-size: 22px; margin: 0 0 8px; letter-spacing: -0.2px; }
+.wiz .lede { color: var(--dim); font-size: 13.5px; line-height: 1.55; margin: 0 0 20px; max-width: 62ch; }
+.wiz textarea { width: 100%; font-family: var(--mono); font-size: 12px; }
+
+.wiz-rail { display: flex; flex-wrap: wrap; gap: 14px; list-style: none;
+  margin: 0 0 26px; padding: 0 0 12px; border-bottom: 1px solid var(--line);
+  font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--line-2); }
+.wiz-rail .done { color: var(--ok); }
+.wiz-rail .on { color: var(--fg); }
+
+.wiz-card { display: block; border: 1px solid var(--line); border-radius: 7px;
+  padding: 13px 15px; margin-bottom: 9px; cursor: pointer; text-transform: none;
+  letter-spacing: 0; font-size: 13px; }
+.wiz-card.on { border-color: var(--accent); background: #0f1721; }
+.wiz-card input { width: auto; margin-right: 9px; }
+.wiz-card b { font-size: 13.5px; }
+.wiz-card p { color: var(--dim); font-size: 12.5px; margin: 5px 0 0 24px; line-height: 1.5; }
+
+.wiz-nav { display: flex; justify-content: space-between; align-items: center;
+  gap: 10px; margin-top: 24px; }
+.wiz-nav .btn { display: inline-block; padding: 6px 13px; border-radius: 5px;
+  text-decoration: none; border: 1px solid var(--line); color: var(--fg); font-size: 13px; }
+.wiz-nav .btn.primary { border-color: var(--accent); color: var(--accent); }
+
+.wiz-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+.wiz-table th { text-align: left; font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: 0.7px; color: var(--dim); padding: 0 6px 5px 0; font-weight: 500; }
+.wiz-table td { padding: 0 6px 5px 0; }
+.wiz-table input { width: 100%; }
+
+.filebtn { display: inline-block; padding: 5px 12px; border: 1px solid var(--line);
+  border-radius: 5px; cursor: pointer; font-size: 13px; text-transform: none;
+  letter-spacing: 0; margin: 0; }
+.filebtn:hover { border-color: var(--accent); color: var(--accent); }
+
+.wiz-preview { border: 1px solid var(--line); border-radius: 7px; padding: 14px 16px; margin-top: 18px; }
+.wiz-preview h3 { margin: 0 0 4px; font-size: 14px; }
+.wiz-enc { margin-top: 9px; font-size: 12.5px; }
+.wiz-enc span { display: inline-block; color: var(--dim); background: #131a22;
+  border-radius: 4px; padding: 1px 8px; margin: 4px 5px 0 0; font-size: 11.5px; }
+
+/* --- host list view -------------------------------------------------------- */
+.viewtoggle { display: inline-flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.viewtoggle button { border: 0; border-radius: 0; margin: 0; padding: 4px 13px; }
+.viewtoggle button + button { border-left: 1px solid var(--line); }
+.viewtoggle button.on { background: color-mix(in srgb, var(--accent) 20%, var(--panel)); color: var(--accent); }
+
+.hostlist-scroll { overflow: auto; max-height: calc(100vh - 190px); border: 1px solid var(--line); border-radius: 6px; }
+.hosttable { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.hosttable thead th {
+  position: sticky; top: 0; z-index: 1; background: #0f141a;
+  text-align: left; font-weight: 500; font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: 0.7px; color: var(--dim); padding: 8px 10px; cursor: pointer;
+  border-bottom: 1px solid var(--line); white-space: nowrap; user-select: none;
+}
+.hosttable thead th:hover { color: var(--fg); }
+.hosttable thead th.on { color: var(--accent); }
+.hosttable tbody tr { cursor: pointer; border-bottom: 1px solid var(--panel); }
+.hosttable tbody tr:hover { background: #131a22; }
+.hosttable td { padding: 6px 10px; vertical-align: top; }
+.hosttable td.num { text-align: right; color: var(--warn); }
+.hosttable .v-row-confirmed td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
+.hosttable .v-row-suspected td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+.hosttable .v-row-cleared td:first-child { box-shadow: inset 3px 0 0 var(--ok); }
+
+/* --- rendered markdown in a transcript bubble ------------------------------ */
+/* pre-wrap is right for a pasted log and wrong for rendered blocks, which
+   bring their own spacing; keeping it would double every gap. */
+.bubble.md { white-space: normal; }
+.bubble.md > :first-child { margin-top: 0; }
+.bubble.md > :last-child { margin-bottom: 0; }
+.bubble.md p { margin: 0 0 9px; }
+.bubble.md .md-h { margin: 14px 0 7px; font-size: 13px; letter-spacing: .3px; color: var(--text); }
+.bubble.md h5.md-h, .bubble.md h6.md-h { font-size: 12.5px; color: var(--muted); }
+.bubble.md .md-list { margin: 0 0 9px; padding-left: 20px; }
+.bubble.md .md-list li { margin: 2px 0; }
+.bubble.md .md-hr { border: 0; border-top: 1px solid var(--line-2); margin: 12px 0; }
+.bubble.md .md-quote {
+  margin: 0 0 9px; padding: 2px 0 2px 11px;
+  border-left: 2px solid var(--line-2); color: var(--muted);
+}
+.bubble.md .md-code {
+  font-family: var(--mono); font-size: 11.5px; background: #0b0f14;
+  border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px;
+}
+.bubble.md .md-pre {
+  margin: 0 0 9px; padding: 10px 12px; background: #080b0f;
+  border: 1px solid var(--line-2); border-radius: 6px;
+  overflow-x: auto;               /* a long command line scrolls, never reflows */
+  white-space: pre;               /* inside a fence, layout is the content */
+}
+.bubble.md .md-pre code { font-family: var(--mono); font-size: 11.5px; color: #c9d6e2; background: none;
+  border: 0; padding: 0; }
+.bubble.md .md-pre[data-lang]::before {
+  content: attr(data-lang); display: block; color: var(--dim);
+  font-size: 9.5px; letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 6px;
+}
+.bubble.md .md-table { border-collapse: collapse; margin: 0 0 9px; font-size: 11.5px; display: block;
+  overflow-x: auto; max-width: 100%; }
+.bubble.md .md-table th, .bubble.md .md-table td {
+  border: 1px solid var(--line); padding: 4px 9px; text-align: left; white-space: nowrap;
+}
+.bubble.md .md-table th { color: var(--dim); font-weight: 500; background: var(--panel-2); }
+.bubble.md a { color: var(--accent); }
+
+/* --- uncollected fields, acknowledged -------------------------------------
+   A row that differs only by a column nobody gathered is not a changed asset.
+   It is muted rather than hidden: an analyst should be able to see that a
+   comparison was made with a hole in it. */
+.chg-partial { background: #2a2a33; color: var(--dim); border-radius: 9px; padding: 1px 7px;
+               font-size: 10px; font-weight: 600; letter-spacing: .3px; }
+
+.gapbar { margin: 10px 14px; border-radius: 7px; padding: 9px 11px; font-size: 12.5px;
+          background: var(--panel-2, #16171c); border: 1px solid var(--line); }
+.gapbar-open { border-color: #3d3a20; background: #1c1b14; }
+.gaphead { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 8px; }
+.gaphead .muted { flex: 1 1 320px; line-height: 1.5; }
+
+.gapfields { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
+.gapchip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px;
+           border: 1px solid var(--line); border-radius: 12px; background: var(--bg);
+           font-family: var(--mono); font-size: 11.5px; cursor: pointer; }
+.gapchip input { margin: 0; cursor: pointer; }
+.gapchip.acked { cursor: default; opacity: .8; }
+.gapchip.acked button { background: none; border: 0; color: var(--dim); cursor: pointer;
+                        padding: 0 0 0 3px; font-size: 13px; line-height: 1; }
+.gapchip.acked button:hover { color: var(--bad); }
+
+.gapactions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.gapactions input { flex: 1 1 260px; min-width: 0; }
+.gapacked { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* An absence somebody has accounted for is not an open question. */
+.coverage-sub { margin: 9px 0 4px; font-size: 10.5px; letter-spacing: .08em;
+                text-transform: uppercase; color: var(--dim); }
+.coverage-explained { opacity: .62; }
+.coverage-explained:hover { opacity: 1; }
+
+/* --- hosts whose evidence was withdrawn ------------------------------------
+   A finding named a host, the host was created because of it, and the finding
+   was then denied. The host cannot be deleted without orphaning the record
+   that explains it, so it is archived instead. */
+.withdrawn-band { margin: 10px 14px; padding: 10px 12px; border-radius: 7px; font-size: 12.5px;
+                  background: #16171c; border: 1px solid var(--line);
+                  display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.withdrawn-band > div:first-child { flex: 1 1 380px; }
+.withdrawn-band .muted { display: block; margin-top: 3px; line-height: 1.5; }
+.withdrawn-names { display: flex; flex-wrap: wrap; gap: 5px; flex: 1 1 100%; }
+.withdrawn-names .mono { font-size: 11.5px; padding: 1px 7px; border-radius: 10px;
+                         background: var(--bg); border: 1px solid var(--line); color: var(--dim); }
+.archived-chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 5px 1px 8px;
+                 border: 1px solid var(--line); border-radius: 11px; font-size: 11.5px; }
+.archived-chip button { background: none; border: 0; color: var(--accent); cursor: pointer;
+                        font-size: 11px; padding: 0 2px; }
+
+/* --- collections in the host drawer ---------------------------------------- */
+.coll { border: 1px solid var(--line); border-radius: 7px; margin-bottom: 7px;
+        background: var(--bg); }
+.coll > summary { cursor: pointer; padding: 7px 10px; display: flex; gap: 9px;
+                  align-items: baseline; font-size: 12.5px; }
+.coll > summary::-webkit-details-marker { display: none; }
+.coll > summary::before { content: '▸'; color: var(--dim); font-size: 10px; }
+.coll[open] > summary::before { content: '▾'; }
+.coll > summary b { flex: 1 1 auto; }
+.coll-snap { padding: 0 10px 5px 24px; font-size: 10.5px; }
+.coll-table { width: 100%; border-collapse: collapse; }
+.coll-table td { padding: 3px 10px; font-size: 11.5px; border-top: 1px solid var(--line);
+                 vertical-align: top; }
+.coll-table td:first-child { width: 38%; word-break: break-all; }
+.coll-more { padding: 5px 10px; font-size: 11px; }
+
+/* --- notifications ----------------------------------------------------------
+   Two things interrupt somebody here: being put on a task, and being tagged.
+   Everything else on this server is a shared picture they can go and look at,
+   and alerting on all of it is how a team learns to ignore the alerts. */
+.bell-wrap { position: relative; }
+.bell { background: none; border: 1px solid var(--line); border-radius: 7px;
+        color: var(--dim); cursor: pointer; padding: 3px 9px; font-size: 14px; line-height: 1.2; }
+.bell:hover { color: var(--text); border-color: var(--line-2); }
+.bell.has-unread { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 26%, var(--panel)); }
+.bell-count { margin-left: 5px; font-size: 10.5px; font-weight: 700;
+              background: var(--warn); color: #1a1200; border-radius: 8px; padding: 0 5px; }
+
+.bell-panel {
+  position: absolute; right: 0; top: calc(100% + 7px); width: 380px; max-height: 60vh;
+  overflow-y: auto; z-index: 60; background: var(--panel); border: 1px solid var(--line-2);
+  border-radius: 9px; box-shadow: 0 12px 32px #0009; padding: 6px;
+}
+.bell-head { display: flex; align-items: center; gap: 8px; padding: 5px 7px 8px; }
+.bell-head b { flex: 1 1 auto; font-size: 12.5px; }
+.bell-head button { font-size: 11px; padding: 2px 8px; }
+.bell-item { display: block; width: 100%; text-align: left; background: none; border: 0;
+             border-top: 1px solid var(--line); padding: 8px 7px; cursor: pointer; color: inherit; }
+.bell-item:hover { background: var(--bg); }
+.bell-item.unread { border-left: 2px solid var(--warn); }
+.bell-item .t { font-size: 12.5px; }
+.bell-item .b { font-size: 11.5px; color: var(--dim); display: block; margin-top: 2px;
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bell-item .w { font-size: 10.5px; color: var(--dim); }
+.bell-empty { padding: 14px 8px; color: var(--dim); font-size: 12px; text-align: center; }
+
+/* Quota, under the team rail. A footnote by design: it answers "where did the
+   allowance go" when the runner warns that it is nearly gone, and otherwise
+   stays out of the way. */
+.usage { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 8px; }
+.usage-row { display: flex; justify-content: space-between; gap: 8px;
+  font-size: 12px; color: var(--muted); padding: 2px 0; }
+.usage-row.total { color: var(--text); font-weight: 600; }
+
+/* Said at the moment of the decision, not in a doc nobody reads. */
+.gapmix { font-size: 12px; color: var(--warn); margin-bottom: 6px; }
+
+/* The wordmark again on the sign-in card, at heading size. Same gradient, so
+   the first screen anyone sees matches the logo they were sent. */
+.login-card h1.brand { font-size: 26px; margin: 0 0 6px; }
+
+/* --- the mark ------------------------------------------------------------ */
+
+/* alt="" on the image: the link already carries the name, and a screen reader
+   announcing "Psephos Psephos" is worse than silence. */
+.brand-lockup { display: flex; align-items: center; gap: 9px; text-decoration: none; }
+.brand-mark { height: 26px; width: auto; display: block; }
+
+.login-mark { height: 76px; width: auto; display: block; margin: 0 auto 10px; }
+.login-card { text-align: center; }
+/* The form itself stays left-aligned; only the lockup is centred. */
+.login-card label, .login-card .hint, .login-card .muted, .login-card .err { text-align: left; }
+
+/*
+  The archive action sits inside its own banner with a paragraph explaining what
+  it does, so it does not need colour to be found. It is deliberately not
+  .primary: cyan is the affirmative action of a screen, and retiring eight
+  findings from every working view is not that, even though it is reversible.
+*/
+.withdrawn-band button { white-space: nowrap; }
+
+/* --- the sign-in splash --------------------------------------------------
+   ψῆφος becoming PSEPHOS, once, after signing in. Shown by splash.js stamping
+   <html class="splashing">; hidden otherwise, so the markup costs nothing on
+   every other load.
+
+   The transliteration is the transition. ψ is PS, ῆ is E, φ is PH, ο is O and
+   ς is S, and each cell below holds one pair: the Greek glyph drops and fades —
+   the pebble into the urn — while its Latin form settles in from above, left to
+   right. Greek in a serif and in plain --text; Latin in the sans and in the
+   masthead gradient, so the old form and the new one are told apart by type
+   and colour, not only by alphabet.
+
+   The timeline is CSS, and the fade-out at the end runs on a fixed delay with a
+   forwards fill: if splash.js dies after showing the overlay, the overlay still
+   leaves. pointer-events: none throughout, so the app is usable underneath and
+   the click that skips it is not swallowed. */
+.splash { display: none; }
+html.splashing .splash {
+  display: grid; place-content: center; justify-items: center; gap: 26px;
+  position: fixed; inset: 0; z-index: 100;
+  background: var(--bg); pointer-events: none;
+  animation: splash-out 400ms ease 1650ms forwards;
+}
+.splash.out { opacity: 0; transition: opacity 220ms ease; }
+@keyframes splash-out { to { opacity: 0; visibility: hidden; } }
+@keyframes splash-in { from { opacity: 0; transform: translateY(6px); } }
+
+.splash-mark { height: 58px; width: auto; animation: splash-in 350ms ease-out both; }
+
+.splash-word {
+  display: flex; font-size: 64px; line-height: 1;
+  animation: splash-in 350ms ease-out 60ms both;
+}
+.splash-word .u { position: relative; display: block; height: 1em; }
+.splash-word .u > i {
+  display: block; font-style: normal; color: var(--text);
+  /* Polytonic Greek: ῆ is in Greek Extended, which plenty of faces lack, and a
+     glyph that falls back mid-word to a different face is worse than a plainer
+     one that does not. These have it on each platform. */
+  font-family: "Times New Roman", "Palatino Linotype", Palatino, "Noto Serif", "DejaVu Serif", serif;
+}
+.splash-word .u > b {
+  /* Down a little from centre, so the caps land on the Greek baseline rather
+     than floating above the word they replace. */
+  position: absolute; left: 50%; top: calc(50% + .12em); translate: -50% -50%;
+  white-space: nowrap; opacity: 0;
+  font-weight: 700; font-size: .78em; letter-spacing: .06em;
+  background: linear-gradient(100deg, var(--accent) 10%, var(--brand) 90%);
+  background-size: var(--W, 100%) 100%; background-position: calc(-1 * var(--x, 0px)) 0;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+@supports not (background-clip: text) {
+  .splash-word .u > b { color: var(--accent); -webkit-text-fill-color: currentColor; }
+}
+
+/* The letter stage, staggered by cell from a start late enough that the Greek
+   word is read as a word before it begins to change. The Greek leaves before
+   the Latin arrives: run together, both sit at half opacity in the same place
+   and the swap reads as a smear rather than a replacement. */
+.splash.go .u {
+  --t: calc(620ms + var(--i) * 90ms);
+  width: var(--gw);
+  animation: splash-cell 480ms cubic-bezier(.4, 0, .2, 1) var(--t) both;
+}
+.splash.go .u > i {
+  position: absolute; left: 50%; top: 50%; translate: -50% -50%;
+  animation: splash-drop 300ms ease-in var(--t) both;
+}
+.splash.go .u > b { animation: splash-land 360ms ease-out calc(var(--t) + 180ms) both; }
+@keyframes splash-cell { from { width: var(--gw); } to { width: var(--lw); } }
+@keyframes splash-drop { to { opacity: 0; transform: translateY(.35em); } }
+@keyframes splash-land { from { opacity: 0; transform: translateY(-.3em); } to { opacity: 1; transform: none; } }
+
+/* The logo's rule under the wordmark, drawn once the last letter has landed. */
+.splash-rule {
+  width: 100%; height: 1px; transform: scaleX(0);
+  background: linear-gradient(90deg,
+    transparent, color-mix(in srgb, var(--accent) 55%, transparent) 25%,
+    color-mix(in srgb, var(--brand) 55%, transparent) 75%, transparent);
+}
+.splash.go .splash-rule { animation: splash-rule 360ms ease-out 1240ms both; }
+@keyframes splash-rule { to { transform: scaleX(1); } }
+
+/* The finished wordmark, still. Shown instead of the cells under reduced
+   motion, and the overlay then cuts rather than fades. The 0s fade-out keeps
+   the fail-open: it jumps to hidden at its delay if the script never ends it. */
+.splash-still { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  html.splashing .splash { animation-duration: 0s; animation-delay: 1000ms; }
+  .splash.out { transition: none; }
+  .splash-mark, .splash-word, .splash-rule { animation: none; }
+  .splash-word { display: none; }
+  .splash-still.brand { display: block; font-size: 44px; }
+}
+
+/* --- plan coverage -------------------------------------------------------- */
+
+/*
+  Deliberately not the verdict triad. Green, amber and red mean confirmed,
+  pending and denied everywhere else in this application, and a matrix cell is
+  not a verdict about a host — borrowing them here would be the exact confusion
+  the palette note at the top of this file exists to prevent.
+*/
+.cov-head { margin-bottom: 14px; }
+.cov-head p { max-width: 70ch; font-size: 12.5px; margin: 6px 0 0; }
+.cov-tactic { margin-bottom: 16px; }
+.cov-tactic h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--muted); margin: 0 0 6px; }
+.cov-grid { display: grid; gap: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.cov-cell { display: flex; flex-direction: column; gap: 2px; align-items: flex-start;
+  text-align: left; padding: 5px 7px; border-radius: 4px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); overflow: hidden; }
+.cov-id { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.cov-name { font-size: 11.5px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 100%; }
+.cov-none     { opacity: .55; }
+.cov-named    { border-color: color-mix(in srgb, var(--purple) 45%, var(--line));
+  background: color-mix(in srgb, var(--purple) 12%, var(--panel)); }
+.cov-authored { border-color: var(--purple);
+  background: color-mix(in srgb, var(--purple) 28%, var(--panel)); }
+.cov-cell:hover { border-color: var(--accent); }
+
+/*
+  --warn here, and not inside the grid. A coloured cell among several hundred
+  reads as a verdict about the thing in it, which is why the coverage states use
+  --purple and opacity instead. A banner is not a cell: this is the same amber
+  .warnbtn and .unassigned already use for "look at this", and a revoked id is
+  exactly that — a maintenance fact about the plan, not a judgement about a host.
+*/
+.cov-orphans { max-width: 70ch; font-size: 12.5px; margin: 8px 0 0;
+  padding: 7px 10px; border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--line));
+  background: color-mix(in srgb, var(--warn) 8%, var(--panel)); }
+.cov-orphans .mono { font-family: var(--mono); }
+
+/*
+  The adjudication trail in the drawer. Deliberately quiet: it is context for a
+  decision somebody is about to make, not the thing they came to read.
+*/
+/* A failure, not an absence. --warn, because it is a state to act on. */
+.search-broken {
+  color: var(--warn); line-height: 1.5; font-size: 12.5px; max-width: 78ch;
+  margin: 0 0 10px; padding: 8px 11px; border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--line));
+  background: color-mix(in srgb, var(--warn) 8%, var(--panel));
+}
+
+.audit-log { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 4px; }
+.audit-log td { padding: 2px 8px 2px 0; border-bottom: 1px solid var(--line); color: var(--muted); }
+.audit-log td:first-child { font-family: var(--mono); white-space: nowrap; }
+.audit-log td:last-child { color: var(--text); }
+
+.cov-panel { border: 1px solid var(--line-2); border-radius: 6px;
+  background: var(--panel-2); padding: 12px 14px; margin-bottom: 14px; }
+.cov-panel-head { display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; margin-bottom: 6px; }
+.cov-panel p { font-size: 12.5px; max-width: 75ch; margin: 4px 0; }
+.cov-detect { margin: 6px 0 10px; padding-left: 18px; font-size: 12px; }
+.cov-detect li { margin-bottom: 3px; }
+
+/*
+  Practice entries (telemetry, hypothesis, deconfliction): a list, not a grid —
+  see practiceHtml()'s comment for why. Every entry is authored by
+  construction, so there is no stub/named/authored ladder here, only whether
+  it is already in the plan — one purple highlight state, same hue as
+  .cov-authored for the same reason that comment gives, never --ok/--warn/--bad.
+*/
+.prac-list { display: flex; flex-direction: column; gap: 6px; }
+.prac-item { display: flex; flex-direction: column; gap: 3px; align-items: flex-start;
+  width: 100%; text-align: left; padding: 8px 10px; border-radius: 4px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); }
+.prac-item:hover { border-color: var(--accent); }
+.prac-name { font-size: 12.5px; font-weight: 600; }
+.prac-desc { font-size: 11.5px; color: var(--muted); }
+.prac-drawn { border-color: var(--purple);
+  background: color-mix(in srgb, var(--purple) 20%, var(--panel)); }
+.prac-badge { font-size: 10px; color: var(--purple); margin-left: 6px;
+  text-transform: uppercase; letter-spacing: .04em; }

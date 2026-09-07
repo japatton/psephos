@@ -1,0 +1,24 @@
+{
+  "members": [
+    {
+      "name": "Reyes",
+      "role": "Mission Commander",
+      "team": "Command"
+    },
+    {
+      "name": "Okafor",
+      "role": "Mission Element Lead",
+      "team": "Bravo"
+    },
+    {
+      "name": "Lindqvist",
+      "role": "Host Analyst",
+      "team": "Bravo"
+    },
+    {
+      "name": "Baptiste",
+      "role": "Network Analyst",
+      "team": "Alpha"
+    }
+  ]
+}
