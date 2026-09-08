@@ -6,7 +6,10 @@
  *
  * Same argument as tools/screenshots.mjs: point it at a demo instance, never a
  * live one, because what is on screen ends up published. Start one with
- * tools/demo-data.mjs.
+ * tools/demo-data.mjs — and rebuild it before every take. A recording is not a
+ * read-only operation: the reel confirms a candidate and the tour's live turn
+ * files a proposal, so the second take against one store films a different
+ * application from the first.
  *
  * The frames are written as JPEGs with the timestamps the browser reported, and
  * an ffmpeg concat script beside them, so the encode preserves the real timing
@@ -23,7 +26,7 @@
  * a caption bar. Neither is in the application — they are injected into the
  * page, and they are why a silent recording is followable at all.
  */
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -98,7 +101,15 @@ const OVERLAY = String.raw`
 })();
 `;
 
-export async function open({ width = 1440, height = 900, outDir, exe = findBrowser() } = {}) {
+/** Silence after a line, so one beat does not run into the next. */
+const NARRATION_PAD = 700;
+
+export async function open({
+  width = 1440, height = 900, outDir, exe = findBrowser(),
+  /* caption text -> { file, ms }. Empty in the silent cut, which is why the
+     silent cut still honours the hold written into the script. */
+  narration = new Map(),
+} = {}) {
   if (!exe) throw new Error('no Chrome or Edge found');
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
@@ -170,6 +181,9 @@ export async function open({ width = 1440, height = 900, outDir, exe = findBrows
   };
 
   // --- recording ------------------------------------------------------------
+  /* Every caption and the frame timestamp it went up on, so a narration track
+     can be built against the picture afterwards. */
+  const beats = [];
   const frames = [];
   let recording = false;
   on('Page.screencastFrame', async (p) => {
@@ -182,7 +196,7 @@ export async function open({ width = 1440, height = 900, outDir, exe = findBrows
   });
 
   const api = {
-    send, evaluate, on, width, height, frames,
+    send, evaluate, on, width, height, frames, beats,
     async goto(url) {
       await send('Page.navigate', { url });
       await sleep(150);
@@ -201,9 +215,41 @@ export async function open({ width = 1440, height = 900, outDir, exe = findBrows
       try { await send('Page.stopScreencast'); } catch { /* already gone */ }
     },
     /** Caption, held for its own reading time unless told otherwise. */
+    /*
+      A caption, and where it sits in the recording.
+
+      The offset is taken from the newest frame's own timestamp rather than
+      from Date.now(): the frames carry the browser's clock, the audio is laid
+      against the frames, and mixing two clocks puts the voice a little further
+      out of step with every beat.
+
+      In narrated mode `hold` is ignored — the shot is held for as long as the
+      line takes to say, which is the whole reason the audio is synthesised
+      before anything is filmed.
+    */
     async caption(html, hold = 0) {
+      const at = frames.length ? frames.at(-1).t : null;
       await evaluate(`window.__cap(${JSON.stringify(html ?? '')})`);
-      if (hold) await sleep(hold);
+      if (html) beats.push({ text: html, at });
+      const spoken = html ? narration.get(html) : null;
+      if (spoken) await sleep(spoken.ms + NARRATION_PAD);
+      else if (hold) await sleep(hold);
+    },
+    /*
+      Hold for a line without putting it in the caption bar.
+
+      Used by the cards, which already say the words on screen. The beat is
+      still logged, so the narration lands against the card rather than after
+      it and the subtitle file has the line in it.
+    */
+    async speak(text, silentHold = 0) {
+      const clip = narration.get(text);
+      if (clip) {
+        beats.push({ text, at: frames.length ? frames.at(-1).t : null });
+        await sleep(clip.ms + NARRATION_PAD);
+      } else if (silentHold) {
+        await sleep(silentHold);
+      }
     },
     /** Move the synthetic cursor to an element and click it for real. */
     async click(selector, { settle = 700, move = 550 } = {}) {
@@ -221,6 +267,19 @@ export async function open({ width = 1440, height = 900, outDir, exe = findBrows
       await sleep(120);
       await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
       await sleep(settle);
+    },
+    /** Point at something without pressing it. */
+    async hover(selector, { move = 500, settle = 300 } = {}) {
+      const box = await evaluate(`(() => {
+        const el = document.querySelector(${JSON.stringify(selector)});
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+      })()`);
+      if (!box) return false;
+      await evaluate(`window.__cursorTo(${box.x}, ${box.y}, ${move})`);
+      await sleep(move + settle);
+      return true;
     },
     /** Type into a field the way a person does, so the video shows it arrive. */
     async type(selector, text, { perChar = 26, settle = 400 } = {}) {
@@ -378,6 +437,20 @@ const MIDROLL = `
 
 const card = (page, html) => page.evaluate(`document.body.innerHTML = ${JSON.stringify(html)}`);
 
+/*
+  A card, held for as long as its own line takes to say.
+
+  The card carries the words already, so the caption bar stays off and the
+  voice reads what is on the card. Silent, it falls back to the hold written
+  into the call — which is why the cards were four seconds before there was a
+  voice and about nine after: reading time and speaking time are not the same
+  quantity.
+*/
+async function cardBeat(page, html, line, silentHold) {
+  await card(page, html);
+  await page.speak(line, silentHold);
+}
+
 /** The pending cards on screen, so a caption never claims one that is not there. */
 const pendingCount = (page) =>
   page.evaluate(`document.querySelectorAll('#view .cand').length`);
@@ -401,14 +474,150 @@ async function fill(page, lines, done) {
 }
 
 /* ------------------------------------------------------------------------- *
- * The short one: about seventy-five seconds, for the top of the README.
+ * The lines.
  *
- * The first eight seconds decide whether a stranger watches the rest, so the
- * card states what the thing is and the first shot is the product's whole
- * argument: a model proposal sitting in a rail, not in the case file.
+ * One table, because the subtitle and the voice are the same words. A line
+ * that only works spoken is the wrong line for a recording whose captions are
+ * part of the picture, and a line that only works read is the wrong line for
+ * one with a voice.
+ *
+ * Exported as objects so the synthesiser can speak every line before the
+ * browser opens: with narration on, a shot is held for exactly as long as its
+ * line takes, and there is nothing to align afterwards.
+ * ------------------------------------------------------------------------- */
+
+const CARD_LINE = {
+  opening: 'Psephos. A workspace for threat hunt teams. The name is the pebble an Athenian '
+    + 'juror dropped into the urn to cast a verdict.',
+  midroll: 'A different instance, mid-hunt. Synthetic exercise data on documentation '
+    + 'addresses. Every host, name and record is invented.',
+  closing: 'Nothing here becomes a finding until a person decides it has.',
+};
+
+const REEL_LINES = {
+  sessions: 'Evidence goes in as it was found. The model reads it against the whole case file '
+    + 'and answers.',
+  candidate: 'Anything it wants recorded lands on the right as a <b>candidate</b>. Nothing the '
+    + 'model can do puts it in the case file.',
+  confirm: 'Filing it is a person\'s act.',
+  audit: 'The record now says who confirmed it and when. Every verdict here writes a row like '
+    + 'this, and no tool the model has can write one.',
+  denied: 'The case file. Denied is kept, not deleted. That the evidence showed nothing is '
+    + 'still a judgement, and a later reader needs it.',
+  map: 'Fill is evidence and verdict. The outline is whether the address answered. The map '
+    + 'will not merge those two questions.',
+  edges: 'The path is drawn from the records and never stored. Deny a record and its edge goes '
+    + 'with it.',
+  timeline: 'The same records in time. Filled marks are adjudicated, hollow ones are still '
+    + 'waiting. The arcs are causality somebody confirmed.',
+  baseline: 'What normal looked like first. Three cron entries on six hosts, and a fourth on '
+    + 'one of them. <b>One of six</b> is the finding. Six of six would be inventory.',
+  coverage: 'The plan against ATT&CK, coloured by what it intends to look for. That is a '
+    + 'different question from what was found.',
+  bank: 'A gap opens its bank entry. There is no authored task for this one, and the panel '
+    + 'says so.',
+  ...CARD_LINE,
+};
+
+const TOUR_LINES = {
+  setup: 'A fresh clone has no mission, so the server comes up in setup and will not guess. '
+    + 'The wrong terrain takes hosts off the map, and every verdict on them goes with them.',
+  model: 'First, which model runs the turns. The CLI keeps its own login, so this application '
+    + 'never holds a credential.',
+  probe1: 'It is checked before it is saved. A backend that cannot answer now will not start '
+    + 'answering at the first piece of evidence.',
+  probe2: 'An API key, if you use one, is written owner-only and never returned to a browser.',
+  probe3: 'A base URL pointing at your own hardware keeps the case file on it.',
+  mission: 'The engagement. The name goes into every prompt. The profile is written under '
+    + 'missions, which is gitignored, because a network map is not source.',
+  briefing: 'What the model must not assume. One line each, sent with every turn. It is the '
+    + 'difference between no evidence found, and no telemetry to find it with.',
+  team: 'The team, in chain of command order. Each person gets a token and their own window. '
+    + 'The token says who you are, so nobody types a name and nobody types the wrong one.',
+  terrain: 'Terrain is the estate you were given. Paste the inventory as it is and the model '
+    + 'structures it. Or start with none, and let the evidence name the hosts.',
+  plan: 'And a plan to start from. It is edited in the app all week. This is only where it '
+    + 'begins.',
+  done: 'Every token is printed to the console the server was started from, and never to a '
+    + 'browser.',
+
+  window: 'One persistent window per analyst. The roster is the session list, and everyone can '
+    + 'read every window. Review across the team is the point.',
+  research: 'The other button, Research, takes the two writing tools away for the turn. A '
+    + 'question cannot become a record because the model decided it should.',
+  evidence: 'Evidence goes in as it was found. This continues the exchange above, which asked '
+    + 'for the file\'s timestamp and the shape of the egress.',
+  send: 'This is a real turn against the Claude CLI, unedited. It takes about a minute.',
+  /*
+    Two lines over the spinner, not seven.
+    Both were wrong in the silent cut and are corrected here: an evidence turn
+    is offered five hunt tools, not six — stage_entities is denied in that mode
+    — and the prompt does not carry the terrain or the baselines. It names not
+    one of the twelve seeded hosts; the model has to go and ask.
+  */
+  given: 'It was given the evidence above, every record already on file, and the briefing. '
+    + 'Terrain and baselines it has to ask for, with tools.',
+  withheld: 'It was not given a shell, the filesystem, the network, or any tool of your own. '
+    + 'It starts with no tools and gains five, and none of the five can file a finding.',
+  away: 'The rest of the application does not wait for it.',
+
+  search: 'Every finding, searched on the server, so the answer covers the whole case file and '
+    + 'not what happened to load.',
+  drawer: 'Open one and it carries its trail. The fields, the host it is bound to, and under '
+    + '<b>Adjudication</b>, every decision anybody made about it, with a name and a time.',
+  archive: 'Denied is kept. It is a judgement. Archiving is separate, and retires a record '
+    + 'from the map, the timeline and the prompt. Nothing is deleted.',
+  map: 'The estate, clustered by enclave. Fill is evidence and verdict. The outline is '
+    + 'presence, whether the address answered. A box that answers a ping is not thereby clean.',
+  diamond: 'The diamond is an address nobody entered. Evidence named it, so it is on the map, '
+    + 'marked as discovered rather than passed off as inventory.',
+
+  back: 'Back in the window, the reply has landed.',
+  proposed: 'Anything it wanted in the case file it had to propose. The proposal is a candidate '
+    + 'on the right, and it is not a record.',
+  asked: 'This time it asked for more before proposing anything. That is also an answer, and it '
+    + 'recorded nothing.',
+  rail: 'Confirm or deny is a person\'s act, and each one writes an audit row with a name on '
+    + 'it. The thread selector puts the finding in a line of enquiry.',
+
+  timeline: 'The same evidence in time. Filled is adjudicated, hollow is pending. A dashed '
+    + 'outline means the recorded time was approximate. The purple arcs are causality somebody '
+    + 'confirmed.',
+  link: 'The fourth link is still a proposal, with its rationale, waiting for a call.',
+
+  normal: 'What normal looks like, so a finding has something to be judged against.',
+  partial: 'A second collection came back without the shell and home columns. A naive diff '
+    + 'would call every row changed. Here the gap was acknowledged, so the rows band as '
+    + '<b>Partial</b> and stop counting as changes.',
+  coverageBand: 'Coverage is stated, not implied. The hosts a snapshot has not reached, and '
+    + 'when each was last seen. It reads still collecting until somebody marks it complete.',
+  rare: 'Nineteen repositories, each with its own idea of identity. Three cron entries on six '
+    + 'hosts, and a fourth on one. <b>One of six</b> is worth a look. Six of six would be '
+    + 'inventory.',
+
+  hunt: 'The hunt plan. The file is the authority and the database is rebuilt from it at every '
+    + 'start, so a week of team edits cannot be lost to a restart.',
+  task: 'Each task carries its intent, its procedure, the evidence to expect, who has it, and '
+    + 'its own history.',
+  coverage: 'The same plan against ATT&CK, coloured by what it intends to look for. The '
+    + 'Navigator export says what was found. The gap between them is the useful part.',
+  states: 'Three states, not two. Nothing names the technique. A task names it but nothing is '
+    + 'written under it. Or a task names it and carries steps. Forty stubs look thorough in a '
+    + 'list.',
+  bank: 'A gap opens its bank entry. What backs each entry is stamped on it, and a stub says '
+    + 'it is a stub.',
+  comms: 'And a place to talk that is not the model. A session can produce records. A channel '
+    + 'produces nothing but its own history. Direct messages are the one thing here that is '
+    + 'private.',
+  ...CARD_LINE,
+};
+
+/* ------------------------------------------------------------------------- *
+ * The short one: under two minutes, for the top of the README.
  * ------------------------------------------------------------------------- */
 async function reel(page, { url, token }) {
-  const cap = (t, hold = 0) => page.caption(t, hold);
+  const L = REEL_LINES;
+  const cap = (line, hold = 0) => page.caption(line, hold);
   const route = async (name, settle = 1200) => {
     await page.click(`#nav a[data-route="${name}"]`, { settle: 300 });
     await sleep(settle);
@@ -419,29 +628,72 @@ async function reel(page, { url, token }) {
   await sleep(400);
   await page.startRecording();
 
-  await card(page, OPENING);
-  await sleep(4200);
+  await sleep(400);
+  await cardBeat(page, OPENING, L.opening, 4200);
+  await sleep(800);
 
   await page.goto(`${url}/#/sessions`);
   await waitFor(page, '#view .transcript');
-  await sleep(1600);                                   // read the screen first
-  await cap('Evidence goes in as it was found. The model reads it against the whole case '
-    + 'file and answers.', 3400);
-  await cap('Anything it wants recorded lands on the right as a <b>candidate</b>. It has not '
-    + 'entered the case file, and nothing the model can do puts it there.', 4200);
+  await sleep(1600);                                   // orient on a new interface
+  await cap(L.sessions, 3400);
+  await cap(L.candidate, 4200);
+  await sleep(800);
 
-  await cap('Filing it is a person\'s act.', 1600);
-  await page.click('#view .cand .ok', { settle: 300 });
-  await cap('', 1500);
+  await cap(L.confirm, 1600);
+  /*
+    The take mutates the store it films: this click confirms a candidate, and a
+    live turn in the long form adds one. So a second take against the same
+    store finds a rail that no longer matches the script — which is worth
+    saying plainly rather than reporting as a missing selector.
+  */
+  if (!await page.evaluate(`Boolean(document.querySelector('#view .cand .ok'))`)) {
+    throw new Error('no pending candidate in the rail — rebuild the demo store '
+      + '(tools/demo-data.mjs) before recording; a previous take confirmed it');
+  }
+  await page.click('#view .cand .ok', { settle: 1500 });
 
   await route('records', 1200);
-  await page.type('#q', 'ntdsutil', { perChar: 55, settle: 1200 });
-  await page.click('#view tbody tr:first-child', { settle: 1400 });
+  await page.type('#q', 'ntdsutil', { perChar: 55, settle: 1000 });
+  await page.click('#view tbody tr:first-child', { settle: 1300 });
   await page.evaluate(`document.querySelector('#drawer')?.scrollTo({ top: 99999, behavior: 'smooth' })`);
-  await sleep(900);
-  await cap('The record now carries who confirmed it and when. Every verdict here writes one '
-    + 'such row, and no tool the model has can write one.', 4400);
+  await sleep(600);
+  await cap(L.audit, 4400);
+  await sleep(600);
 
+  await closeDrawerAndClear(page);
+  await sleep(1000);
+  await cap(L.denied, 4000);
+  await sleep(600);
+
+  await route('map', 1500);                            // speak into the settle, not after it
+  await cap(L.map, 4400);
+  await cap(L.edges, 3200);
+  await sleep(800);
+
+  await route('timeline', 1400);
+  await cap(L.timeline, 4400);
+  await sleep(800);
+
+  await route('characterization', 1200);
+  await page.click('[data-repo="scheduled-tasks"]', { settle: 1200 });
+  await cap(L.baseline, 4600);
+  await sleep(800);
+
+  await route('plan', 1400);
+  await page.click('#view [data-mode="coverage"]', { settle: 2400 });
+  await cap(L.coverage, 3600);
+  await page.click('#view .cov-cell.cov-none', { settle: 1200 });
+  await cap(L.bank, 4000);
+  await sleep(1000);
+
+  await cap('');
+  await sleep(500);
+  await cardBeat(page, CLOSING, L.closing, 5000);
+  await sleep(4000);
+}
+
+/** Escape out of the drawer and put the search back to empty. */
+async function closeDrawerAndClear(page) {
   await page.send('Input.dispatchKeyEvent',
     { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
   await page.send('Input.dispatchKeyEvent',
@@ -452,50 +704,21 @@ async function reel(page, { url, token }) {
     q.value = '';
     q.dispatchEvent(new Event('input', { bubbles: true }));
   })()`);
-  await sleep(1400);
-  await cap('The case file. Denied is kept, not deleted: that the evidence showed nothing is '
-    + 'still a judgement, and a later reader needs it.', 4000);
-
-  await cap('');
-  await route('map', 3000);                            // the force layout settles first
-  await sleep(1200);
-  await cap('Fill is the verdict; the outline is whether the address answered — two questions '
-    + 'the map will not merge.', 4400);
-  await cap('The path is drawn from the records, never stored. Deny a record and its edge goes '
-    + 'with it.', 3200);
-
-  await cap('');
-  await route('timeline', 2200);
-  await cap('The same records in time. Filled marks are adjudicated, hollow are still waiting. '
-    + 'The arcs are causality somebody confirmed.', 4400);
-
-  await cap('');
-  await route('characterization', 1800);
-  await page.click('[data-repo="scheduled-tasks"]', { settle: 1600 });
-  await cap('What normal looked like first. Three cron entries across six hosts, and a fourth '
-    + 'on one of them. <b>1 of 6</b> is the finding; on 6 of 6 it would be inventory.', 4600);
-
-  await cap('');
-  await route('plan', 1400);
-  await page.click('#view [data-mode="coverage"]', { settle: 2400 });
-  await cap('The plan against ATT&CK, coloured by what it <b>intends</b> to look for — a '
-    + 'different question from what was found.', 3600);
-  await page.click('#view .cov-cell.cov-none', { settle: 2000 });
-  await cap('A gap opens its bank entry. This one has no authored task, and the panel says so '
-    + 'rather than dressing MITRE\'s own text as tradecraft.', 4000);
-
-  await cap('');
-  await sleep(400);
-  await card(page, CLOSING);
-  await sleep(5000);
 }
 
 /* ------------------------------------------------------------------------- *
- * The long one: the wizard walked on an empty instance, then the whole
- * application on a populated one, with a real turn filmed as it happens.
+ * The long one.
+ *
+ * The turn is real and takes about a minute, and the recording no longer
+ * stands over the spinner for all of it: two lines about what the model was
+ * and was not given, then it leaves and tours the records and the map while
+ * the turn runs, and comes back to a reply that has landed. That is also the
+ * truer picture — the turn is one process on a server the rest of the team is
+ * still using.
  * ------------------------------------------------------------------------- */
 async function tour(page, { setupUrl, setupToken, demoUrl, demoToken, live }) {
-  const cap = (t, hold = 0) => page.caption(t, hold);
+  const L = TOUR_LINES;
+  const cap = (line, hold = 0) => page.caption(line, hold);
   const route = async (name, settle = 1400) => {
     await page.click(`#nav a[data-route="${name}"]`, { settle: 300 });
     await sleep(settle);
@@ -504,54 +727,44 @@ async function tour(page, { setupUrl, setupToken, demoUrl, demoToken, live }) {
   await page.goto(`${setupUrl}/login`);
   await sleep(500);
   await page.startRecording();
-  await card(page, OPENING);
-  await sleep(4200);
+  await sleep(400);
+  await cardBeat(page, OPENING, L.opening, 4200);
+  await sleep(800);
 
   // --- the wizard ----------------------------------------------------------
   await page.cookie('hunt_token', setupToken, setupUrl);
   await page.goto(`${setupUrl}/`);
   await waitFor(page, '.wiz-rail');
   await sleep(1000);
-  await cap('A fresh clone has no mission, so the server comes up in <b>setup</b> and will not '
-    + 'guess. A guess against the wrong terrain takes hosts off the map along with every '
-    + 'verdict recorded against them.', 5000);
-
-  await cap('First: which model runs the turns. The CLI keeps its own login, so this '
-    + 'application never holds a credential.', 3600);
-  await page.click('.wiz-card', { settle: 400 });
-  await page.click('[data-act="model"]', { settle: 200 });
-  /* The probe is a real call and can take a minute. */
-  await fill(page, [
-    ['It is checked for real before it is saved: a backend that cannot answer now will not '
-      + 'start answering at the first piece of evidence.', 4200],
-    ['The other two options take a key and, for anything speaking the OpenAI chat API, a base '
-      + 'URL — a local endpoint keeps the case file on your own hardware.', 5000],
-    ['The key is written owner-only, read by one function no route calls, and never returned '
-      + 'to a browser.', 4000],
-    ['Checking.', 2500],
-  ], async () => page.evaluate(`Boolean(document.querySelector('[data-act="mission"]'))`));
+  await cap(L.setup, 5000);
   await sleep(600);
 
-  await cap('The engagement. Its name goes into the header and into every prompt; the profile '
-    + 'is written to a gitignored folder under <b>missions/</b>, because a network map is not '
-    + 'source.', 1000);
+  await cap(L.model, 3600);
+  await page.click('.wiz-card', { settle: 400 });
+  await page.click('[data-act="model"]', { settle: 200 });
+  /* A real probe, up to a minute. Three claims worth making, then silence —
+     the button already says "Working…", and a voice that announces a wait and
+     then stops is worse than the button alone. */
+  await fill(page, [[L.probe1, 2000], [L.probe2, 2000], [L.probe3, 3000]],
+    async () => page.evaluate(`Boolean(document.querySelector('[data-act="mission"]'))`));
+  await sleep(600);
+
+  // Typing runs under the line: the field filling while it is described is the
+  // one place picture and voice can share a beat without either being idle.
+  await cap(L.mission, 900);
   await page.type('[data-f="name"]', 'Northern Watch 27-1', { perChar: 40 });
   await page.type('[data-f="week"]', 'Week 2 — Linux and OT', { perChar: 40 });
   await page.click('[data-act="mission"]', { settle: 800 });
   await waitFor(page, '[data-act="briefing"]');
 
-  await cap('What the model must not assume. One line each, sent with every turn.', 2400);
+  await cap(L.briefing, 900);
   await page.type('[data-f="briefing"]',
     '4625 is not collected on the Linux estate.\n'
     + 'Endpoint sensors landed 14 Aug; silence before that means nothing.', { perChar: 20 });
-  await cap('This is the difference between "no evidence found" and "no telemetry exists to '
-    + 'find it".', 3000);
   await page.click('[data-act="briefing"]', { settle: 800 });
   await waitFor(page, '[data-act="roster"]');
 
-  await cap('The team, in chain-of-command order. Each person gets a token and their own '
-    + 'window; the token says who you are, so nobody types a name and nobody types the wrong '
-    + 'one.', 1200);
+  await cap(L.team, 900);
   const roster = [
     ['Reyes', 'Mission Commander', 'Command'],
     ['Okafor', 'Mission Element Lead', 'Bravo'],
@@ -567,176 +780,255 @@ async function tour(page, { setupUrl, setupToken, demoUrl, demoToken, live }) {
   await page.click('[data-act="roster"]', { settle: 800 });
   await waitFor(page, '[data-act="noterrain"]');
 
-  await cap('Terrain is the estate you were given. Paste whatever the inventory actually is '
-    + 'and the model structures it — or start with none, and let evidence name the hosts.', 4400);
+  await cap(L.terrain, 4400);
   await page.click('[data-act="noterrain"]', { settle: 1200 });
   await waitFor(page, '[data-act="planexample"]', 30000);
 
-  await cap('And a plan to start from. It is edited in the app all week; this is only where it '
-    + 'begins.', 3000);
+  await cap(L.plan, 3000);
   await page.click('[data-act="planexample"]', { settle: 1500 });
-  await sleep(2600);                                   // the done screen says it itself
-  await cap('Every token is printed to the console the server was started from — never to a '
-    + 'browser, and not recoverable from one.', 3600);
+  await sleep(2000);                                   // the headline says it itself
+  await cap(L.done, 3600);
+  await sleep(1000);
 
   await cap('');
-  await card(page, MIDROLL);
-  await sleep(2800);
+  await cardBeat(page, MIDROLL, L.midroll, 2800);
+  await sleep(800);
 
-  // --- the populated instance ----------------------------------------------
+  // --- the session ---------------------------------------------------------
   await page.goto(`${demoUrl}/login`);
   await page.cookie('hunt_token', demoToken, demoUrl);
   await page.goto(`${demoUrl}/#/sessions`);
   await waitFor(page, '#view .transcript', 20000);
   await sleep(1800);
-  await cap('One persistent window per analyst. The roster <b>is</b> the session list, and '
-    + 'everyone can read every window — review across the team is the point.', 4400);
+  await cap(L.window, 4400);
+  await sleep(600);
 
+  let before = 0;
   if (live) {
-    const before = await pendingCount(page);
-    await cap('Evidence goes in as it was found. This continues the exchange above — the reply '
-      + 'asked for the file\'s timestamp and the shape of the egress.', 1200);
+    /* Said where the button is, and pointed at, rather than over a spinner
+       fifty seconds later with nothing on screen to attach it to. */
+    await page.hover('#view .composer [data-mode="research"]');
+    await cap(L.research, 5200);
+    await page.hover('#view .composer [data-mode="evidence"]');
+    await sleep(800);
+
+    before = await pendingCount(page);
+    await cap(L.evidence, 1200);
     await page.type('#ta',
       'stat on /etc/cron.d/log-sync: modified 2026-03-11 22:38:51Z. svc_deploy\'s ssh login '
       + 'from 192.0.2.12 was 22:02:10Z, and nothing else under /etc/cron.d changed that day.\n'
       + 'Egress from RL-03 to 203.0.113.200:8443 since 22:45: a POST every 15 minutes, '
-      + '2.8-3.4 MB each.', { perChar: 11, settle: 600 });
+      + '2.8-3.4 MB each.', { perChar: 11, settle: 500 });
 
-    await cap('This is a real turn against the Claude CLI, in real time. It usually takes a '
-      + 'minute or so.', 2600);
+    await cap(L.send, 2600);
     await page.click('#cf .primary', { settle: 300 });
 
-    /*
-      The wait is the most informative minute in the recording, so it is spent
-      on what the model was and was not given rather than on a spinner.
-    */
-    await fill(page, [
-      ['What it was given: the evidence above, every record already in the case file, the '
-        + 'terrain, the baselines, and the briefing.', 4200],
-      ['What it was not given: a shell, the filesystem, the network, or any tool of your own. '
-        + 'The subprocess starts with zero tools and gains six.', 4800],
-      ['Six. Propose a finding. Propose a link. Query the terrain. Search the records. Stage '
-        + 'baseline rows. Ask what normal looks like.', 4600],
-      ['None of them files anything. A proposed finding is written as <b>pending</b> and '
-        + 'waits.', 3400],
-      ['The other channel on the composer, Research, takes the two writing tools away for the '
-        + 'turn — so a question cannot become a record because the model decided it should.', 5200],
-      ['It runs in an empty directory of its own. Your CLAUDE.md and memory files never reach '
-        + 'a session a teammate on the LAN can start.', 4400],
-      ['The same six tools on every backend: an MCP server for the CLI, tool definitions for '
-        + 'an HTTP API. What the mode allows is what the model is offered.', 5000],
-      ['Still working.', 3000],
-    ], async () => page.evaluate(
-      `Boolean(document.querySelector('#view .composer .primary:not([disabled])'))`));
-
-    await cap('', 3500);                               // read the reply
-    const after = await pendingCount(page);
-    await cap(after > before
-      ? 'Anything it wanted in the case file it had to <b>propose</b>. The proposal is a '
-        + 'candidate, not a record, and it is sitting on the right.'
-      : 'This time it asked for more before proposing anything. That is also an answer, and it '
-        + 'recorded nothing.', 4200);
+    const answered = async () => page.evaluate(
+      `Boolean(document.querySelector('#view .composer .primary:not([disabled])'))`);
+    await fill(page, [[L.given, 2500], [L.withheld, 2500]], answered);
+    await cap(L.away, 1800);
   }
 
-  await page.evaluate(`document.querySelector('#view .rail, #view aside')
-    ?.scrollTo({ top: 0, behavior: 'smooth' })`);
-  await cap('Confirm or deny is a person\'s act, and each one writes an audit row with their '
-    + 'name on it. Assigning a thread first puts the finding in a line of enquiry.', 4400);
-
-  // --- records -------------------------------------------------------------
+  // --- records and map, while the turn runs --------------------------------
   await cap('');
   await route('records');
-  await page.type('#q', 'log-sync', { perChar: 55, settle: 1500 });
-  await cap('Every finding, searched on the server rather than in the browser, so the answer '
-    + 'covers the whole case file and not what happened to load.', 4000);
-  await page.click('#view tbody tr:first-child', { settle: 1500 });
+  await page.type('#q', 'log-sync', { perChar: 55, settle: 1200 });
+  await cap(L.search, 4000);
+  await page.click('#view tbody tr:first-child', { settle: 1400 });
   await page.evaluate(`document.querySelector('#drawer')?.scrollTo({ top: 99999, behavior: 'smooth' })`);
+  await sleep(800);
+  await cap(L.drawer, 4800);
+  await sleep(600);
+
+  await closeDrawerAndClear(page);
   await sleep(1000);
-  await cap('Open one and it carries its trail: the fields, the host it is bound to, and under '
-    + '<b>Adjudication</b> every decision anybody made about it, with a name and a time.', 4800);
+  await cap(L.archive, 4400);
+  await sleep(600);
 
-  await page.send('Input.dispatchKeyEvent',
-    { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
-  await page.send('Input.dispatchKeyEvent',
-    { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
-  await page.evaluate(`(() => {
-    const q = document.querySelector('#view #q');
-    if (!q) return;
-    q.value = '';
-    q.dispatchEvent(new Event('input', { bubbles: true }));
-  })()`);
-  await sleep(1300);
-  await cap('Denied is kept — it is a judgement. Archiving is separate and retires a record '
-    + 'from the map, the timeline and the prompt; nothing is ever deleted.', 4400);
-
-  // --- map -----------------------------------------------------------------
   await cap('');
-  await route('map', 3200);
-  await sleep(1200);
-  await cap('The estate, clustered by enclave. Fill is evidence and verdict; the outline is '
-    + 'presence — whether the address answered. A box that answers a ping is not thereby '
-    + 'clean.', 4800);
-  await cap('The diamond is an address nobody entered. Evidence named it, so it is on the map, '
-    + 'marked as absent from the terrain rather than quietly added to it.', 4400);
-  await cap('The edges are derived from the records on read and never stored, so the graph '
-    + 'cannot drift from the evidence that justifies it.', 3800);
+  await route('map', 1500);
+  await cap(L.map, 4800);
+  await cap(L.diamond, 4400);
+  await sleep(800);
+
+  // --- back to the window --------------------------------------------------
+  if (live) {
+    await cap('');
+    await route('sessions', 1200);
+    await waitFor(page, '#view .transcript', 20000);
+    /* If it is somehow still running, wait it out in silence rather than
+       talking over a spinner a second time. */
+    while (!(await page.evaluate(
+      `Boolean(document.querySelector('#view .composer .primary:not([disabled])'))`))) {
+      await sleep(700);
+    }
+    await sleep(1200);
+    await cap(L.back, 2400);
+    await sleep(3000);                                 // read the reply
+    const after = await pendingCount(page);
+    await cap(after > before ? L.proposed : L.asked, 4200);
+    await page.evaluate(`document.querySelector('#view .rail, #view aside')
+      ?.scrollTo({ top: 0, behavior: 'smooth' })`);
+    await sleep(600);
+    await cap(L.rail, 4400);
+    await sleep(1000);
+  }
 
   // --- timeline ------------------------------------------------------------
   await cap('');
-  await route('timeline', 2600);
-  await cap('The same evidence in time. Filled is adjudicated, hollow is pending; a dashed '
-    + 'outline means the recorded time was approximate. The purple arcs are causality '
-    + 'somebody confirmed.', 5000);
-  await cap('The fourth link is still a proposal, with its rationale, waiting for a call. It '
-    + 'opened on the densest stretch on purpose — a month-old outlier beside a night\'s work '
-    + 'leaves the night unreadable.', 5200);
+  await route('timeline', 2000);
+  await cap(L.timeline, 5000);
+  /* The tray sits below the chart and can be under the fold at 900px; the line
+     must not describe a card the viewer cannot see. */
+  await page.evaluate(`document.querySelector('#view .tray')
+    ?.scrollIntoView({ block: 'center', behavior: 'smooth' })`);
+  await sleep(900);
+  await cap(L.link, 3200);
+  await sleep(1000);
 
   // --- characterization ----------------------------------------------------
   await cap('');
-  await route('characterization', 2400);
-  await cap('What normal looks like, so a finding has something to be judged against.', 2800);
-  await cap('A second collection came back without the shell and home columns. A naive diff '
-    + 'calls every row changed; here the gap was acknowledged, the rows band as <b>Partial</b>, '
-    + 'and they stop counting as changes.', 5600);
-  await cap('Coverage is stated, not implied: the hosts a snapshot has not reached, and when '
-    + 'each was last seen. It stays "still collecting" until somebody says it is done.', 4600);
-  await page.click('[data-repo="scheduled-tasks"]', { settle: 1800 });
-  await cap('Nineteen repositories, each with its own idea of identity. Three cron entries on '
-    + 'six hosts and a fourth on one — <b>1 of 6</b> is worth a look; 6 of 6 would be '
-    + 'inventory.', 5000);
+  await route('characterization', 2000);
+  await cap(L.normal, 2800);
+  await cap(L.partial, 5600);
+  await cap(L.coverageBand, 4600);
+  await page.click('[data-repo="scheduled-tasks"]', { settle: 1600 });
+  await cap(L.rare, 5000);
+  await sleep(800);
 
   // --- plan ----------------------------------------------------------------
   await cap('');
-  await route('plan', 2200);
-  await cap('The hunt plan. The file is the authority and the database is rebuilt from it at '
-    + 'every start, so a week of team edits cannot be lost to a restart.', 4200);
-  await page.click('#view [data-expand]', { settle: 1800 });
-  await cap('Intent, technique, the procedure to run, the evidence to expect, who has it, and '
-    + 'its own history.', 3600);
-
-  await page.click('#view [data-mode="coverage"]', { settle: 2600 });
-  await cap('The same plan against ATT&CK, coloured by what it <b>intends</b> — a different '
-    + 'question from the Navigator export, which says what was found. The gap between them is '
-    + 'the useful part.', 5200);
-  await cap('Three states, not two: nothing names it; a task names it with nothing written '
-    + 'under it; a task names it and carries steps. Forty stubs look thorough in a list.', 5000);
-  await page.click('#view .cov-cell.cov-none', { settle: 2200 });
-  await cap('A gap opens its bank entry — every live technique, 697 Enterprise and 97 ICS, '
-    + 'plus entries ATT&CK has no id for. What backs each one is stamped on it, and a stub '
-    + 'says it is a stub.', 5400);
+  await route('plan', 1800);
+  await cap(L.hunt, 4200);
+  await page.click('#view [data-expand]', { settle: 1600 });
+  await cap(L.task, 3600);
+  await page.click('#view [data-mode="coverage"]', { settle: 2400 });
+  await cap(L.coverage, 5200);
+  await cap(L.states, 5000);
+  await page.click('#view .cov-cell.cov-none', { settle: 1800 });
+  await cap(L.bank, 5400);
+  await sleep(1000);
 
   // --- comms ---------------------------------------------------------------
   await cap('');
-  await route('comms', 2400);
-  await cap('And a place for the team to talk that is not the model. A session can produce '
-    + 'records; a channel produces nothing but its own history.', 4200);
-  await cap('Direct messages are the one thing here that is private. Everything else is open, '
-    + 'because review across the team is what the tool is for.', 4000);
+  await route('comms', 2000);
+  await cap(L.comms, 4200);
+  await sleep(1000);
 
   await cap('');
   await sleep(600);
-  await card(page, CLOSING);
-  await sleep(5500);
+  await cardBeat(page, CLOSING, L.closing, 5500);
+  await sleep(4000);
+}
+
+/* ------------------------------------------------------------------------- *
+ * Narration.
+ *
+ * macOS speaks it — `say` is in the box, the Premium voices are free and
+ * offline, and a recording of a tool whose whole argument is that it installs
+ * nothing should not need a cloud API to have a voice.
+ *
+ * Synthesised BEFORE anything is filmed, because the picture follows the
+ * voice rather than the other way round: each line's real duration is what
+ * the shot is held for. Aligning afterwards means either trimming the video
+ * or speeding up the speech, and both are audible.
+ * ------------------------------------------------------------------------- */
+
+/** Strip the caption's markup — <b> is cyan on screen and nothing to the ear. */
+const stripped = (caption) => caption.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+
+/*
+  What to feed the synthesiser where the spelling defeats it.
+
+  The subtitle keeps the real spelling; only the voice gets these. The rule
+  behind the list: no identifier, no technique number, no roster surname and no
+  hyphenated compound is ever spoken — where one was needed, the line was
+  rewritten instead of fought, which is why this table is short.
+*/
+const SAY_AS = [
+  [/\bPsephos\b/g, 'Seefoss'],
+  [/ATT&CK/g, 'attack'],
+  [/\bCLI\b/g, 'C L I'],
+  [/\bAPI\b/g, 'A P I'],
+  [/\bcron\b/g, 'kron'],
+  [/\bgitignored\b/g, 'git ignored'],
+  [/owner-only/g, 'owner only'],
+  [/mid-hunt/g, 'mid hunt'],
+];
+const spoken = (caption) =>
+  SAY_AS.reduce((t, [re, to]) => t.replace(re, to), stripped(caption));
+
+/**
+ * Speak every line and measure it.
+ * @returns Map of caption text -> { file, ms }
+ */
+async function synthesise(lines, { voice, dir, rate }) {
+  const { execFileSync } = await import('node:child_process');
+  mkdirSync(dir, { recursive: true });
+  const table = new Map();
+
+  for (const [i, caption] of lines.entries()) {
+    const text = spoken(caption);
+    if (!text) continue;
+    const file = join(dir, `line-${String(i).padStart(3, '0')}.aiff`);
+    execFileSync('say', ['-v', voice, ...(rate ? ['-r', String(rate)] : []), '-o', file, text]);
+    const probe = execFileSync('ffprobe',
+      ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file],
+      { encoding: 'utf8' });
+    const ms = Math.round(Number(probe.trim()) * 1000);
+    if (!Number.isFinite(ms)) throw new Error(`could not measure ${file}`);
+    table.set(caption, { file, ms });
+  }
+  return table;
+}
+
+/**
+ * The narration track, laid against the frame timestamps the beats recorded.
+ *
+ * Built as one concat of silence and clips rather than a forty-input mix: the
+ * beats never overlap, so the simple thing is also the exact thing.
+ */
+function narrationPlan(beats, table, frames) {
+  if (!frames.length) return [];
+  const t0 = frames[0].t;
+  const plan = [];
+  let cursor = 0;
+  for (const b of beats) {
+    const clip = table.get(b.text);
+    if (!clip || b.at == null) continue;
+    const at = Math.max(0, Math.round((b.at - t0) * 1000));
+    if (at < cursor) continue;              // a line that would talk over the last
+    plan.push({ silence: at - cursor, file: clip.file, ms: clip.ms });
+    cursor = at + clip.ms;
+  }
+  const total = Math.round((frames.at(-1).t - t0) * 1000);
+  if (total > cursor) plan.push({ silence: total - cursor, file: null, ms: 0 });
+  return plan;
+}
+
+/** Subtitles, because a recording with a voice is still watched muted. */
+function srt(beats, table, frames) {
+  if (!frames.length) return '';
+  const t0 = frames[0].t;
+  const stamp = (ms) => {
+    const h = String(Math.floor(ms / 3600000)).padStart(2, '0');
+    const m = String(Math.floor(ms / 60000) % 60).padStart(2, '0');
+    const sec = String(Math.floor(ms / 1000) % 60).padStart(2, '0');
+    return `${h}:${m}:${sec},${String(ms % 1000).padStart(3, '0')}`;
+  };
+  const out = [];
+  beats.forEach((b, i) => {
+    if (b.at == null) return;
+    const start = Math.max(0, Math.round((b.at - t0) * 1000));
+    const clip = table.get(b.text);
+    const next = beats.slice(i + 1).find(x => x.at != null);
+    const end = clip ? start + clip.ms + 400
+      : next ? Math.round((next.at - t0) * 1000) - 100 : start + 3000;
+    // The real spelling, not the one the synthesiser was fed: "Seefoss" is for
+    // the voice, and a subtitle that says it is a subtitle with a typo in it.
+    out.push(`${out.length + 1}\n${stamp(start)} --> ${stamp(Math.max(end, start + 900))}\n${stripped(b.text)}\n`);
+  });
+  return out.join('\n');
 }
 
 // --- drive it ---------------------------------------------------------------
@@ -763,7 +1055,29 @@ if (/:8787(\/|$)/.test(url) && !process.argv.includes('--yes-this-is-a-demo')) {
 }
 
 const out = arg('out', `frames-${WHICH}`);
-const page = await open({ outDir: out, width: 1440, height: 900 });
+
+/*
+  Narration, when asked for. Everything is spoken and measured before the
+  browser opens: the shot lengths come from the audio, so there is nothing to
+  align afterwards.
+*/
+const voice = arg('voice');
+/*
+  Filled after the browser opens, not before: open() clears the output
+  directory, and the clips live under it. The recorder closes over this map, so
+  filling it here is the same as having passed it full.
+*/
+const narration = new Map();
+const page = await open({ outDir: out, width: 1440, height: 900, narration });
+if (voice) {
+  const lines = WHICH === 'reel' ? Object.values(REEL_LINES) : Object.values(TOUR_LINES);
+  process.stdout.write(`speaking ${lines.length} lines as ${voice}… `);
+  for (const [k, v] of await synthesise(lines, {
+    voice, dir: join(out, 'voice'), rate: arg('rate') ? Number(arg('rate')) : null,
+  })) narration.set(k, v);
+  const total = [...narration.values()].reduce((n, c) => n + c.ms, 0);
+  console.log(`${Math.round(total / 1000)}s of speech`);
+}
 try {
   if (WHICH === 'reel') await reel(page, { url, token });
   else {
@@ -781,8 +1095,38 @@ try {
   await page.stopRecording();
   writeFileSync(join(out, 'concat.txt'), concatScript(page.frames));
   console.log(`${page.frames.length} frames in ${out}`);
+
+  if (voice && page.frames.length) {
+    /*
+      The audio track, written as its own concat script: silence up to each
+      line, then the line. The beats do not overlap, so this is exact without
+      a mixer.
+    */
+    const plan = narrationPlan(page.beats, narration, page.frames);
+    const silences = join(out, 'voice');
+    const parts = [];
+    for (const [i, step] of plan.entries()) {
+      if (step.silence > 0) {
+        const gap = join(silences, `gap-${String(i).padStart(3, '0')}.wav`);
+        execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'lavfi',
+          '-i', `anullsrc=r=22050:cl=mono`, '-t', (step.silence / 1000).toFixed(3), gap]);
+        parts.push(gap);
+      }
+      if (step.file) parts.push(step.file);
+    }
+    writeFileSync(join(out, 'audio.txt'),
+      parts.map(f => `file '${f}'`).join('\n') + '\n');
+    writeFileSync(join(out, `${WHICH}.srt`), srt(page.beats, narration, page.frames));
+    console.log(`narration: ${plan.length} cues, subtitles in ${WHICH}.srt`);
+  }
+
   console.log('encode with:');
   console.log(`  ffmpeg -y -f concat -safe 0 -i ${out}/concat.txt \\`);
   console.log(`    -vf "fps=30,format=yuv420p" -c:v libx264 -crf 21 -movflags +faststart ${WHICH}.mp4`);
+  if (voice) {
+    console.log('then lay the voice under it:');
+    console.log(`  ffmpeg -y -f concat -safe 0 -i ${out}/audio.txt -i ${WHICH}.mp4 \\`);
+    console.log(`    -map 1:v -map 0:a -c:v copy -c:a aac -b:a 128k -shortest ${WHICH}-narrated.mp4`);
+  }
   await page.close();
 }
