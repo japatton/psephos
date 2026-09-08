@@ -13,9 +13,15 @@ resulting store and update live for everyone on the team.
 
 No `npm install`. No build step. Node 24 built-ins and one vendored copy of D3.
 
+![Sixty seconds of Psephos: a proposal confirmed, the case file, the map, the timeline, and the plan against ATT&CK](docs/psephos-reel.gif)
+
+*Sixty seconds of it working. There is a [cleaner MP4](docs/psephos-reel.mp4), and a
+[four-minute tour](https://github.com/japatton/psephos/releases/latest) that starts from an
+empty clone and includes a real model turn.*
+
 ![A hunt session: evidence in, a proposal out, pending candidates waiting for a call](docs/screenshots/sessions.png)
 
-> Every screenshot here is from synthetic data on a documentation network. See
+> Every screenshot and recording here is from synthetic data on a documentation network. See
 > [Try it without an engagement](#try-it-without-an-engagement).
 
 ## Start
@@ -580,6 +586,20 @@ node tools/screenshots.mjs --url http://127.0.0.1:8799 --token <the token demo-d
 
 It drives headless Edge or Chrome over the DevTools protocol — no screenshot library, and
 nothing to install. It refuses to point at port 8787.
+
+The recordings come from the same instance and the same protocol:
+
+```bash
+node tools/record-demo.mjs --reel --url http://127.0.0.1:8799 --token <the token demo-data printed>
+```
+
+That writes JPEG frames and an ffmpeg concat script carrying the browser's own frame
+timestamps, and prints the encode command rather than running it — ffmpeg is the one thing
+in this repository that is not in the box. `--tour` records the long version instead and
+takes `--setup-url` and `--setup-token` for a second, mission-less instance, so the wizard
+is filmed being walked rather than described. A headless capture has no pointer and a
+recording has no narration, so both are drawn into the page: a synthetic cursor that moves
+to whatever is about to be clicked, and a caption bar.
 
 ## Tests
 

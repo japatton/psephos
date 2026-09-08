@@ -361,7 +361,9 @@ test('the only tracked binaries are the demo screenshots and the brand assets', 
     return buf.subarray(0, 4096).includes(0);
   });
   const stray = binary.filter(f =>
-    !/^docs\/screenshots\/[\w-]+\.png$/.test(f) && !BRAND_ASSETS.has(f));
+    !/^docs\/screenshots\/[\w-]+\.png$/.test(f)
+    && !/^docs\/psephos-reel\.(gif|mp4)$/.test(f)
+    && !BRAND_ASSETS.has(f));
   assert.deepEqual(stray, [],
     'a binary outside docs/screenshots is unreadable to every check in this file');
 });
