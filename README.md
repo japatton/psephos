@@ -13,10 +13,10 @@ resulting store and update live for everyone on the team.
 
 No `npm install`. No build step. Node 24 built-ins and one vendored copy of D3.
 
-![Sixty seconds of Psephos: a proposal confirmed, the case file, the map, the timeline, and the plan against ATT&CK](docs/psephos-reel.gif)
+![Eighty-five seconds of Psephos: a proposal confirmed, the case file, the map, the timeline, and the plan against ATT&CK](docs/psephos-reel.gif)
 
-*Sixty seconds of it working. There is a [cleaner MP4](docs/psephos-reel.mp4), and a
-[four-minute tour](https://github.com/japatton/psephos/releases/latest) that starts from an
+*Eighty-five seconds of it working. There is a [cleaner MP4](docs/psephos-reel.mp4), and a
+[five-minute tour](https://github.com/japatton/psephos/releases/latest) that starts from an
 empty clone and includes a real model turn.*
 
 ![A hunt session: evidence in, a proposal out, pending candidates waiting for a call](docs/screenshots/sessions.png)

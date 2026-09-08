@@ -56,13 +56,13 @@ const OVERLAY = String.raw`
       '  padding: 46px 40px 26px; opacity: 0; transition: opacity .35s ease; pointer-events: none;',
       '  text-shadow: 0 1px 3px rgba(0,0,0,.9); }',
       '#__cap.on { opacity: 1; }',
-      '#__cap b { color: #4fd1c5; font-weight: 600; }',
+      '#__cap b { color: #2de2ff; font-weight: 600; }',
       '#__cur { position: fixed; z-index: 2147483647; width: 22px; height: 22px; margin: -3px 0 0 -3px;',
       '  pointer-events: none; opacity: 0; transition: opacity .2s ease; }',
       '#__cur.on { opacity: 1; }',
       '#__cur svg { filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); }',
       '#__ring { position: fixed; z-index: 2147483646; width: 34px; height: 34px; margin: -17px 0 0 -17px;',
-      '  border: 2.5px solid #4fd1c5; border-radius: 50%; pointer-events: none; opacity: 0; transform: scale(.35); }',
+      '  border: 2.5px solid #2de2ff; border-radius: 50%; pointer-events: none; opacity: 0; transform: scale(.35); }',
       '#__ring.go { animation: __pulse .5s ease-out; }',
       '@keyframes __pulse { 0% { opacity: .95; transform: scale(.35); } 100% { opacity: 0; transform: scale(1.5); } }',
     ].join('\n');
@@ -297,296 +297,446 @@ async function waitFor(page, selector, ms = 20000) {
   throw new Error(`never appeared: ${selector}`);
 }
 
-const TITLE = (main, sub) => `document.body.innerHTML = ${JSON.stringify(
-  `<div style="height:100vh;display:grid;place-items:center;background:#0b0f14;color:#e9eef5;`
-  + `font:600 52px -apple-system,system-ui;letter-spacing:-1px;text-align:center;line-height:1.3">`
-  + `${main}<div style="font:400 20px -apple-system,system-ui;color:#8b98a8;margin-top:16px;`
-  + `letter-spacing:0">${sub}</div></div>`)}`;
 
-/** The long one: the wizard on a fresh instance, then every view on a full one. */
-async function tour(page, { setupUrl, setupToken, demoUrl, demoToken, live }) {
+/* ------------------------------------------------------------------------- *
+ * The cards.
+ *
+ * Rendered by replacing the document, so they cut to and from the application
+ * with no seam: same ground as --bg, which is #05070d rather than black
+ * because saturated neon on true black halates (theme.css says why at length).
+ *
+ * The shield from web/mark.png, never docs/logo.png — that one carries a
+ * strapline in a register this project spends its whole README refusing.
+ * ------------------------------------------------------------------------- */
+
+const OPENING = `
+<style>
+  #card{height:100vh;display:grid;place-content:center;justify-items:center;gap:22px;
+    background:#05070d;color:#e6f3ff;font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    text-align:center;overflow:hidden}
+  #card img{height:132px;width:auto;animation:in .35s ease-out both}
+  .word{position:relative;height:72px;width:420px}
+  .word i{position:absolute;inset:0;display:block;font-style:normal;font-size:66px;line-height:72px;
+    color:#e6f3ff;font-family:"Times New Roman",Palatino,"Noto Serif",serif;
+    animation:in .35s ease-out .06s both, drop .32s ease-in 1500ms forwards}
+  .word b{position:absolute;inset:0;display:block;font-size:52px;line-height:72px;font-weight:700;
+    letter-spacing:.06em;background:linear-gradient(100deg,#2de2ff 10%,#ff2d95 90%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    -webkit-text-fill-color:transparent;opacity:0;animation:land .38s ease-out 1720ms forwards}
+  .rule{width:420px;height:1px;transform:scaleX(0);
+    background:linear-gradient(90deg,transparent,rgba(45,226,255,.55) 25%,rgba(255,45,149,.55) 75%,transparent);
+    animation:rule .36s ease-out 2100ms forwards}
+  .sub{max-width:44ch;color:#7f93ad;font-size:19px;line-height:1.45;opacity:0;
+    animation:land .4s ease-out 2350ms forwards}
+  @keyframes in{from{opacity:0;transform:translateY(6px)}}
+  @keyframes drop{to{opacity:0;transform:translateY(.35em)}}
+  @keyframes land{from{opacity:0;transform:translateY(-.3em)}to{opacity:1;transform:none}}
+  @keyframes rule{to{transform:scaleX(1)}}
+</style>
+<div id="card">
+  <img src="/mark.png" alt="">
+  <div class="word"><i>&#968;&#8134;&#966;&#959;&#962;</i><b>PSEPHOS</b></div>
+  <div class="rule"></div>
+  <p class="sub">A workspace for threat-hunt teams. The name is the pebble an Athenian juror
+  dropped into the urn to cast a verdict.</p>
+</div>`;
+
+const CLOSING = `
+<style>
+  #end{height:100vh;display:grid;place-content:center;justify-items:center;gap:26px;background:#05070d;
+    color:#e6f3ff;font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-align:center}
+  #end h1{margin:0;font-size:44px;font-weight:600;letter-spacing:-.5px;line-height:1.25;max-width:22ch;
+    animation:in .4s ease-out both}
+  #end h1 b{font-weight:600;color:#2de2ff}
+  #end .url{font:500 21px ui-monospace,SFMono-Regular,Consolas,monospace;color:#2de2ff;opacity:0;
+    animation:in .4s ease-out .9s forwards}
+  #end .rule{width:360px;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(45,226,255,.55) 25%,rgba(255,45,149,.55) 75%,transparent)}
+  #end .foot{color:#56667e;font-size:14px;letter-spacing:.02em;opacity:0;animation:in .4s ease-out 1.4s forwards}
+  @keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+</style>
+<div id="end">
+  <h1>Nothing here becomes a finding<br>until <b>a person</b> decides it has.</h1>
+  <div class="rule"></div>
+  <div class="url">github.com/japatton/psephos</div>
+  <div class="foot">Node 24 &middot; no dependencies &middot; no build step &middot; Apache-2.0</div>
+</div>`;
+
+/* The cut from the wizard's "NW-27-1 is live" to a populated estate would
+   otherwise read as the wizard having produced it, which is false. */
+const MIDROLL = `
+<style>
+  #mid{height:100vh;display:grid;place-content:center;justify-items:center;gap:14px;background:#05070d;
+    color:#e6f3ff;font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-align:center}
+  #mid h1{margin:0;font-size:34px;font-weight:600;letter-spacing:-.4px}
+  #mid p{margin:0;color:#7f93ad;font-size:19px;max-width:40ch;line-height:1.45}
+</style>
+<div id="mid">
+  <h1>A different instance, mid-hunt.</h1>
+  <p>Synthetic exercise data on documentation addresses. Every host, name and record is invented.</p>
+</div>`;
+
+const card = (page, html) => page.evaluate(`document.body.innerHTML = ${JSON.stringify(html)}`);
+
+/** The pending cards on screen, so a caption never claims one that is not there. */
+const pendingCount = (page) =>
+  page.evaluate(`document.querySelectorAll('#view .cand').length`);
+
+/**
+ * Captions that run while something slow happens.
+ *
+ * The model check and a real turn are both up to a minute of a spinner, and
+ * the rough cut covered each with one line and dead air. Every line here is
+ * true whatever the reply turns out to be, so none of them is a promise the
+ * footage has to keep. When `done()` goes true the caption in flight finishes
+ * and the rest are dropped.
+ */
+async function fill(page, lines, done) {
+  for (const [text, hold] of lines) {
+    await page.caption(text, hold);
+    if (await done()) return true;
+  }
+  while (!(await done())) await sleep(500);
+  return true;
+}
+
+/* ------------------------------------------------------------------------- *
+ * The short one: about seventy-five seconds, for the top of the README.
+ *
+ * The first eight seconds decide whether a stranger watches the rest, so the
+ * card states what the thing is and the first shot is the product's whole
+ * argument: a model proposal sitting in a rail, not in the case file.
+ * ------------------------------------------------------------------------- */
+async function reel(page, { url, token }) {
   const cap = (t, hold = 0) => page.caption(t, hold);
-  const SETUP = setupUrl, SETUP_TOKEN = setupToken, DEMO = demoUrl, DEMO_TOKEN = demoToken;
-  const LIVE = live;
-  const route = async (name, settle = 1400) => {
+  const route = async (name, settle = 1200) => {
     await page.click(`#nav a[data-route="${name}"]`, { settle: 300 });
     await sleep(settle);
   };
 
-  // ---------------------------------------------------------------- title
-  await page.goto(`${SETUP}/login`);
-  await sleep(600);
+  await page.goto(`${url}/login`);
+  await page.cookie('hunt_token', token, url);
+  await sleep(400);
   await page.startRecording();
-  await page.evaluate(`document.body.innerHTML = '<div style="height:100vh;display:grid;' +
-    'place-items:center;background:#0b0f14;color:#e9eef5;font:600 60px -apple-system,system-ui;' +
-    'letter-spacing:-1px">Psephos<div style="font:400 21px -apple-system,system-ui;color:#8b98a8;' +
-    'margin-top:14px;letter-spacing:0">a hunt workspace where nothing becomes a finding ' +
-    'until a person says so</div></div>'`);
-  await sleep(2600);
 
-  // ---------------------------------------------------------------- setup
-  await cap('A fresh clone has no mission, so the server comes up in <b>setup</b> and refuses to guess.');
-  await page.goto(`${SETUP}/`);
-  await page.cookie('hunt_token', SETUP_TOKEN, SETUP);
-  await page.goto(`${SETUP}/`);
-  await waitFor(page, '.wiz-rail');
-  await sleep(1200);
+  await card(page, OPENING);
+  await sleep(4200);
 
-  await cap('Six steps. First: which model runs the turns — and it is checked for real before it is saved.', 2600);
-  await page.click('.wiz-card', { settle: 500 });
-  await page.click('[data-act="model"]', { settle: 600 });
-  await waitFor(page, '[data-act="mission"]', 60000);
+  await page.goto(`${url}/#/sessions`);
+  await waitFor(page, '#view .transcript');
+  await sleep(1600);                                   // read the screen first
+  await cap('Evidence goes in as it was found. The model reads it against the whole case '
+    + 'file and answers.', 3400);
+  await cap('Anything it wants recorded lands on the right as a <b>candidate</b>. It has not '
+    + 'entered the case file, and nothing the model can do puts it there.', 4200);
+
+  await cap('Filing it is a person\'s act.', 1600);
+  await page.click('#view .cand .ok', { settle: 300 });
+  await cap('', 1500);
+
+  await route('records', 1200);
+  await page.type('#q', 'ntdsutil', { perChar: 55, settle: 1200 });
+  await page.click('#view tbody tr:first-child', { settle: 1400 });
+  await page.evaluate(`document.querySelector('#drawer')?.scrollTo({ top: 99999, behavior: 'smooth' })`);
   await sleep(900);
+  await cap('The record now carries who confirmed it and when. Every verdict here writes one '
+    + 'such row, and no tool the model has can write one.', 4400);
 
-  await cap('The engagement. A gitignored folder is created for it under <b>missions/</b>.', 2000);
-  await page.type('[data-f="name"]', 'Northern Watch 27-1', { perChar: 45 });
-  await page.type('[data-f="week"]', 'Week 2 — Linux and OT', { perChar: 45 });
-  await page.click('[data-act="mission"]', { settle: 900 });
-  await waitFor(page, '[data-act="briefing"]');
-
-  await cap('What the model must not assume. This is the difference between "no evidence found" '
-    + 'and "no telemetry exists to find it".', 2600);
-  await page.type('[data-f="briefing"]',
-    '4625 is not collected on the Linux estate.\nEndpoint sensors landed 14 Aug; silence before that means nothing.',
-    { perChar: 22 });
-  await page.click('[data-act="briefing"]', { settle: 900 });
-  await waitFor(page, '[data-act="roster"]');
-
-  await cap('The team. Each person gets their own token and their own chat window — '
-    + 'so the token says who you are and nobody types a name.', 2800);
-  const roster = [
-    ['Reyes', 'Mission Commander', 'Command'],
-    ['Okafor', 'Mission Element Lead', 'Bravo'],
-    ['Lindqvist', 'Host Analyst', 'Bravo'],
-  ];
-  for (let i = 0; i < roster.length; i++) {
-    if (i) await page.click('[data-act="addrow"]', { settle: 250 });
-    const [n, r, t] = roster[i];
-    await page.type(`tr:nth-child(${i + 1}) [data-f="name"]`, n, { perChar: 34, settle: 120 });
-    await page.type(`tr:nth-child(${i + 1}) [data-f="role"]`, r, { perChar: 20, settle: 120 });
-    await page.type(`tr:nth-child(${i + 1}) [data-f="team"]`, t, { perChar: 34, settle: 120 });
-  }
-  await page.click('[data-act="roster"]', { settle: 900 });
-  await waitFor(page, '[data-act="noterrain"]');
-
-  await cap('Terrain is the estate you were given. Paste an inventory and the model structures it, '
-    + 'or start with none and let evidence name the hosts.', 3000);
-  await page.click('[data-act="noterrain"]', { settle: 1200 });
-  await waitFor(page, '[data-act="planexample"]', 30000);
-
-  await cap('And a hunt plan to start from.', 1800);
-  await page.click('[data-act="planexample"]', { settle: 1500 });
-  await sleep(2600);
-  await cap('Set up. Every token is printed to the console the server was started from, never to a browser.', 3000);
-
-  // ---------------------------------------------------------------- the app
-  await cap('Here is one already in progress.', 1800);
-  await page.goto(`${DEMO}/login`);
-  await page.cookie('hunt_token', DEMO_TOKEN, DEMO);
-  await page.goto(`${DEMO}/#/sessions`);
-  await waitFor(page, '#view .transcript', 20000);
-  await sleep(1600);
-
-  await cap('One persistent window per analyst. The roster <b>is</b> the session list, '
-    + 'so there is never a question about whose window is whose.', 3200);
-  await sleep(600);
-
-  if (LIVE) {
-    await cap('Evidence goes in as you found it — paste the log, say what you see.', 2400);
-    await page.type('#ta',
-      'Two Bravo workstations show the same scheduled task, created 40 seconds apart:\n'
-      + 'RL-04  \\Microsoft\\Windows\\UpdateOrchestrator\\Reboot  runs powershell -enc\n'
-      + 'RL-06  \\Microsoft\\Windows\\UpdateOrchestrator\\Reboot  same command line\n'
-      + 'Neither host has the entry in the 26 Aug baseline.',
-      { perChar: 11, settle: 700 });
-    await cap('This is a real turn against the Claude CLI. Watch the reply arrive.', 1800);
-    await page.click('#cf .primary', { settle: 400 });
-    await cap('The model reads the case file it is given — every record already collected, '
-      + 'the terrain, the baselines — and answers against it.');
-    // The turn is real, so this waits on it rather than on a guess.
-    const until = Date.now() + 180000;
-    let saw = false;
-    while (Date.now() < until) {
-      saw = await page.evaluate(
-        `Boolean(document.querySelector('#view .composer .primary:not([disabled])'))`);
-      if (saw) break;
-      await sleep(500);
-    }
-    await sleep(2500);
-    await cap('Anything it wants in the case file it must <b>propose</b> through a typed tool. '
-      + 'A proposal is a candidate, never a record.', 3400);
-  }
-
-  await cap('Proposals land in the pending rail. Confirm or deny is a person\'s act, '
-    + 'and each one writes an audit row saying who decided.', 3400);
-  await page.evaluate(`document.querySelector('#view .rail, #view .pending, #view aside')
-    ?.scrollIntoView({ block: 'start', behavior: 'smooth' })`);
-  await sleep(900);
-
-  // ---------------------------------------------------------------- records
-  await cap('');
-  await route('records');
-  await cap('Every finding, searched on the server rather than in the browser — '
-    + 'so the answer is computed over the whole case file, not over what happened to load.', 3200);
-  await page.type('#q', 'log-sync', { perChar: 60, settle: 1600 });
-  await cap('Open one and you get its whole trail: the fields, the artifact it came from, '
-    + 'and every decision anybody made about it.', 3000);
-  await page.click('#view tbody tr:first-child', { settle: 1600 });
-  await sleep(2200);
-  await page.evaluate(`document.querySelector('#drawer')?.scrollTo({ top: 420, behavior: 'smooth' })`);
-  await sleep(2000);
-  // Escape closes it, and the filter goes back to empty — everything after this
-  // reads the same query, and a stale one would quietly empty the next view.
   await page.send('Input.dispatchKeyEvent',
     { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
   await page.send('Input.dispatchKeyEvent',
     { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
-  await sleep(600);
   await page.evaluate(`(() => {
     const q = document.querySelector('#view #q');
     if (!q) return;
     q.value = '';
     q.dispatchEvent(new Event('input', { bubbles: true }));
   })()`);
-  await sleep(1200);
-
-  // ---------------------------------------------------------------- map
-  await cap('');
-  await route('map', 3200);
-  await cap('The estate, clustered by enclave. Fill is evidence and verdict; the outline is presence — '
-    + 'whether the host answered at all.', 3600);
-  await sleep(1200);
-  await cap('The intrusion path is drawn from the findings themselves, not from anybody\'s diagram.', 3200);
-  await sleep(1000);
-
-  // ---------------------------------------------------------------- timeline
-  await cap('');
-  await route('timeline', 2600);
-  await cap('The same evidence in time. Filled marks are adjudicated, hollow are pending, '
-    + 'and the purple arcs are causality somebody confirmed.', 3600);
   await sleep(1400);
+  await cap('The case file. Denied is kept, not deleted: that the evidence showed nothing is '
+    + 'still a judgement, and a later reader needs it.', 4000);
 
-  // ---------------------------------------------------------------- characterization
   await cap('');
-  await route('characterization', 2600);
-  await cap('What normal looks like, so a finding has something to be judged against. '
-    + 'An unfamiliar process on one host of eighty is worth a look; on all eighty it is inventory.', 4000);
+  await route('map', 3000);                            // the force layout settles first
   await sleep(1200);
-  await cap('Nineteen repositories, each diffed against the last collection — and the gaps are '
-    + 'recorded as gaps, so a field nobody collected never reads as a field with nothing in it.', 4000);
-  await sleep(1200);
+  await cap('Fill is the verdict; the outline is whether the address answered — two questions '
+    + 'the map will not merge.', 4400);
+  await cap('The path is drawn from the records, never stored. Deny a record and its edge goes '
+    + 'with it.', 3200);
 
-  // ---------------------------------------------------------------- plan
-  await cap('');
-  await route('plan', 2200);
-  await cap('The hunt plan. The file is the authority and the database is rebuilt from it at every '
-    + 'start, so a week of team edits cannot be lost to a restart.', 3600);
-  await page.click('#view [data-expand]', { settle: 1800 });
-  await cap('Procedure, expected evidence, who it is assigned to, and its own history.', 3000);
-  await sleep(800);
-
-  await cap('And the same plan against ATT&CK — coloured by what it <b>intends</b>, '
-    + 'which is a different question from what was found.', 3200);
-  await page.click('#view [data-mode="coverage"]', { settle: 2600 });
-  await sleep(1400);
-  await cap('Three states, not two: unnamed, named by a task with nothing written under it, '
-    + 'and named by a task that carries steps. Forty stubs look thorough in a list.', 4000);
-  await page.click('#view .cov-cell.cov-none', { settle: 2200 });
-  await cap('A gap opens the bank entry behind it — 794 techniques to draw from, '
-    + 'and what backs each entry is stamped on it.', 3600);
-  await sleep(1200);
-
-  // ---------------------------------------------------------------- comms
-  await cap('');
-  await route('comms', 2400);
-  await cap('And a place for the team to talk that is not the model. '
-    + 'Direct messages are the one thing here that is private.', 3400);
-  await sleep(1600);
-
-  // ---------------------------------------------------------------- close
-  await cap('');
-  await sleep(600);
-  await page.evaluate(`document.body.innerHTML = '<div style="height:100vh;display:grid;' +
-    'place-items:center;background:#0b0f14;color:#e9eef5;font:600 46px -apple-system,system-ui;' +
-    'letter-spacing:-1px;text-align:center">Nothing here becomes a finding<br>until a person ' +
-    'decides it has.<div style="font:400 20px ui-monospace,monospace;color:#4fd1c5;margin-top:26px">' +
-    'github.com/japatton/psephos</div></div>'`);
-  await sleep(3400);
-}
-
-/** The short one: ninety seconds for a README, with no live turn in it. */
-async function reel(page, { url, token }) {
-  const cap = (t, hold = 0) => page.caption(t, hold);
-  const URL_ = url, TOKEN = token;
-  const route = async (name, settle = 1200) => {
-    await page.click(`#nav a[data-route="${name}"]`, { settle: 300 });
-    await sleep(settle);
-  };
-  const card = (html) => page.evaluate(`document.body.innerHTML = ${JSON.stringify(html)}`);
-
-  await page.goto(`${URL_}/login`);
-  await page.cookie('hunt_token', TOKEN, URL_);
-  await sleep(500);
-  await page.startRecording();
-
-  await card('<div style="height:100vh;display:grid;place-items:center;background:#0b0f14;'
-    + 'color:#e9eef5;font:600 58px -apple-system,system-ui;letter-spacing:-1px;text-align:center">'
-    + 'Psephos<div style="font:400 20px -apple-system,system-ui;color:#8b98a8;margin-top:14px;'
-    + 'letter-spacing:0">a hunt workspace where nothing becomes a finding until a person says so</div></div>');
-  await sleep(2800);
-
-  // 1. the session
-  await page.goto(`${URL_}/#/sessions`);
-  await waitFor(page, '#view .transcript');
-  await sleep(1400);
-  await cap('You work evidence with a model. It proposes findings through typed tools — '
-    + 'never straight into the case file.', 4200);
-
-  // 2. the act that matters
-  await cap('Every proposal is a candidate until a person confirms it.', 2600);
-  await page.click('#view .cand .ok', { settle: 1800 });
-  await cap('That is one audit row: who decided, when, and what it looked like before.', 3000);
-
-  // 3. records
-  await cap('');
-  await route('records', 1400);
-  await cap('The case file. Searched on the server, exported as a workbook, an ATT&CK layer, '
-    + 'IOCs, or the report itself.', 4000);
-  await sleep(600);
-
-  // 4. map
-  await cap('');
-  await route('map', 3000);
-  await cap('The estate, clustered by enclave — fill is evidence and verdict, outline is whether '
-    + 'the host answered at all.', 4200);
-  await sleep(800);
-
-  // 5. timeline
   await cap('');
   await route('timeline', 2200);
-  await cap('The same findings in time, with confirmed causality drawn between them.', 3400);
+  await cap('The same records in time. Filled marks are adjudicated, hollow are still waiting. '
+    + 'The arcs are causality somebody confirmed.', 4400);
 
-  // 6. characterization
   await cap('');
-  await route('characterization', 2200);
-  await cap('And what normal looked like first — so "unusual" is a measurement, not an impression.', 3800);
+  await route('characterization', 1800);
+  await page.click('[data-repo="scheduled-tasks"]', { settle: 1600 });
+  await cap('What normal looked like first. Three cron entries across six hosts, and a fourth '
+    + 'on one of them. <b>1 of 6</b> is the finding; on 6 of 6 it would be inventory.', 4600);
 
-  // 7. coverage
   await cap('');
-  await route('plan', 1600);
+  await route('plan', 1400);
   await page.click('#view [data-mode="coverage"]', { settle: 2400 });
-  await cap('The plan against ATT&CK: what it intends to hunt, which is not what it found.', 3600);
+  await cap('The plan against ATT&CK, coloured by what it <b>intends</b> to look for — a '
+    + 'different question from what was found.', 3600);
   await page.click('#view .cov-cell.cov-none', { settle: 2000 });
-  await cap('Every gap opens a bank entry you can draw straight into the plan.', 3200);
+  await cap('A gap opens its bank entry. This one has no authored task, and the panel says so '
+    + 'rather than dressing MITRE\'s own text as tradecraft.', 4000);
 
   await cap('');
   await sleep(400);
-  await card('<div style="height:100vh;display:grid;place-items:center;background:#0b0f14;'
-    + 'color:#e9eef5;font:600 40px -apple-system,system-ui;letter-spacing:-.5px;text-align:center;'
-    + 'line-height:1.35">No dependencies. No build step.<br>Node 24 and your own machine.'
-    + '<div style="font:400 19px ui-monospace,monospace;color:#4fd1c5;margin-top:28px">'
-    + 'github.com/japatton/psephos</div></div>');
-  await sleep(3200);
+  await card(page, CLOSING);
+  await sleep(5000);
+}
+
+/* ------------------------------------------------------------------------- *
+ * The long one: the wizard walked on an empty instance, then the whole
+ * application on a populated one, with a real turn filmed as it happens.
+ * ------------------------------------------------------------------------- */
+async function tour(page, { setupUrl, setupToken, demoUrl, demoToken, live }) {
+  const cap = (t, hold = 0) => page.caption(t, hold);
+  const route = async (name, settle = 1400) => {
+    await page.click(`#nav a[data-route="${name}"]`, { settle: 300 });
+    await sleep(settle);
+  };
+
+  await page.goto(`${setupUrl}/login`);
+  await sleep(500);
+  await page.startRecording();
+  await card(page, OPENING);
+  await sleep(4200);
+
+  // --- the wizard ----------------------------------------------------------
+  await page.cookie('hunt_token', setupToken, setupUrl);
+  await page.goto(`${setupUrl}/`);
+  await waitFor(page, '.wiz-rail');
+  await sleep(1000);
+  await cap('A fresh clone has no mission, so the server comes up in <b>setup</b> and will not '
+    + 'guess. A guess against the wrong terrain takes hosts off the map along with every '
+    + 'verdict recorded against them.', 5000);
+
+  await cap('First: which model runs the turns. The CLI keeps its own login, so this '
+    + 'application never holds a credential.', 3600);
+  await page.click('.wiz-card', { settle: 400 });
+  await page.click('[data-act="model"]', { settle: 200 });
+  /* The probe is a real call and can take a minute. */
+  await fill(page, [
+    ['It is checked for real before it is saved: a backend that cannot answer now will not '
+      + 'start answering at the first piece of evidence.', 4200],
+    ['The other two options take a key and, for anything speaking the OpenAI chat API, a base '
+      + 'URL — a local endpoint keeps the case file on your own hardware.', 5000],
+    ['The key is written owner-only, read by one function no route calls, and never returned '
+      + 'to a browser.', 4000],
+    ['Checking.', 2500],
+  ], async () => page.evaluate(`Boolean(document.querySelector('[data-act="mission"]'))`));
+  await sleep(600);
+
+  await cap('The engagement. Its name goes into the header and into every prompt; the profile '
+    + 'is written to a gitignored folder under <b>missions/</b>, because a network map is not '
+    + 'source.', 1000);
+  await page.type('[data-f="name"]', 'Northern Watch 27-1', { perChar: 40 });
+  await page.type('[data-f="week"]', 'Week 2 — Linux and OT', { perChar: 40 });
+  await page.click('[data-act="mission"]', { settle: 800 });
+  await waitFor(page, '[data-act="briefing"]');
+
+  await cap('What the model must not assume. One line each, sent with every turn.', 2400);
+  await page.type('[data-f="briefing"]',
+    '4625 is not collected on the Linux estate.\n'
+    + 'Endpoint sensors landed 14 Aug; silence before that means nothing.', { perChar: 20 });
+  await cap('This is the difference between "no evidence found" and "no telemetry exists to '
+    + 'find it".', 3000);
+  await page.click('[data-act="briefing"]', { settle: 800 });
+  await waitFor(page, '[data-act="roster"]');
+
+  await cap('The team, in chain-of-command order. Each person gets a token and their own '
+    + 'window; the token says who you are, so nobody types a name and nobody types the wrong '
+    + 'one.', 1200);
+  const roster = [
+    ['Reyes', 'Mission Commander', 'Command'],
+    ['Okafor', 'Mission Element Lead', 'Bravo'],
+    ['Lindqvist', 'Host Analyst', 'Bravo'],
+  ];
+  for (let i = 0; i < roster.length; i++) {
+    if (i) await page.click('[data-act="addrow"]', { settle: 220 });
+    const [n, r, t] = roster[i];
+    await page.type(`tr:nth-child(${i + 1}) [data-f="name"]`, n, { perChar: 22, settle: 100 });
+    await page.type(`tr:nth-child(${i + 1}) [data-f="role"]`, r, { perChar: 18, settle: 100 });
+    await page.type(`tr:nth-child(${i + 1}) [data-f="team"]`, t, { perChar: 22, settle: 100 });
+  }
+  await page.click('[data-act="roster"]', { settle: 800 });
+  await waitFor(page, '[data-act="noterrain"]');
+
+  await cap('Terrain is the estate you were given. Paste whatever the inventory actually is '
+    + 'and the model structures it — or start with none, and let evidence name the hosts.', 4400);
+  await page.click('[data-act="noterrain"]', { settle: 1200 });
+  await waitFor(page, '[data-act="planexample"]', 30000);
+
+  await cap('And a plan to start from. It is edited in the app all week; this is only where it '
+    + 'begins.', 3000);
+  await page.click('[data-act="planexample"]', { settle: 1500 });
+  await sleep(2600);                                   // the done screen says it itself
+  await cap('Every token is printed to the console the server was started from — never to a '
+    + 'browser, and not recoverable from one.', 3600);
+
+  await cap('');
+  await card(page, MIDROLL);
+  await sleep(2800);
+
+  // --- the populated instance ----------------------------------------------
+  await page.goto(`${demoUrl}/login`);
+  await page.cookie('hunt_token', demoToken, demoUrl);
+  await page.goto(`${demoUrl}/#/sessions`);
+  await waitFor(page, '#view .transcript', 20000);
+  await sleep(1800);
+  await cap('One persistent window per analyst. The roster <b>is</b> the session list, and '
+    + 'everyone can read every window — review across the team is the point.', 4400);
+
+  if (live) {
+    const before = await pendingCount(page);
+    await cap('Evidence goes in as it was found. This continues the exchange above — the reply '
+      + 'asked for the file\'s timestamp and the shape of the egress.', 1200);
+    await page.type('#ta',
+      'stat on /etc/cron.d/log-sync: modified 2026-03-11 22:38:51Z. svc_deploy\'s ssh login '
+      + 'from 192.0.2.12 was 22:02:10Z, and nothing else under /etc/cron.d changed that day.\n'
+      + 'Egress from RL-03 to 203.0.113.200:8443 since 22:45: a POST every 15 minutes, '
+      + '2.8-3.4 MB each.', { perChar: 11, settle: 600 });
+
+    await cap('This is a real turn against the Claude CLI, in real time. It usually takes a '
+      + 'minute or so.', 2600);
+    await page.click('#cf .primary', { settle: 300 });
+
+    /*
+      The wait is the most informative minute in the recording, so it is spent
+      on what the model was and was not given rather than on a spinner.
+    */
+    await fill(page, [
+      ['What it was given: the evidence above, every record already in the case file, the '
+        + 'terrain, the baselines, and the briefing.', 4200],
+      ['What it was not given: a shell, the filesystem, the network, or any tool of your own. '
+        + 'The subprocess starts with zero tools and gains six.', 4800],
+      ['Six. Propose a finding. Propose a link. Query the terrain. Search the records. Stage '
+        + 'baseline rows. Ask what normal looks like.', 4600],
+      ['None of them files anything. A proposed finding is written as <b>pending</b> and '
+        + 'waits.', 3400],
+      ['The other channel on the composer, Research, takes the two writing tools away for the '
+        + 'turn — so a question cannot become a record because the model decided it should.', 5200],
+      ['It runs in an empty directory of its own. Your CLAUDE.md and memory files never reach '
+        + 'a session a teammate on the LAN can start.', 4400],
+      ['The same six tools on every backend: an MCP server for the CLI, tool definitions for '
+        + 'an HTTP API. What the mode allows is what the model is offered.', 5000],
+      ['Still working.', 3000],
+    ], async () => page.evaluate(
+      `Boolean(document.querySelector('#view .composer .primary:not([disabled])'))`));
+
+    await cap('', 3500);                               // read the reply
+    const after = await pendingCount(page);
+    await cap(after > before
+      ? 'Anything it wanted in the case file it had to <b>propose</b>. The proposal is a '
+        + 'candidate, not a record, and it is sitting on the right.'
+      : 'This time it asked for more before proposing anything. That is also an answer, and it '
+        + 'recorded nothing.', 4200);
+  }
+
+  await page.evaluate(`document.querySelector('#view .rail, #view aside')
+    ?.scrollTo({ top: 0, behavior: 'smooth' })`);
+  await cap('Confirm or deny is a person\'s act, and each one writes an audit row with their '
+    + 'name on it. Assigning a thread first puts the finding in a line of enquiry.', 4400);
+
+  // --- records -------------------------------------------------------------
+  await cap('');
+  await route('records');
+  await page.type('#q', 'log-sync', { perChar: 55, settle: 1500 });
+  await cap('Every finding, searched on the server rather than in the browser, so the answer '
+    + 'covers the whole case file and not what happened to load.', 4000);
+  await page.click('#view tbody tr:first-child', { settle: 1500 });
+  await page.evaluate(`document.querySelector('#drawer')?.scrollTo({ top: 99999, behavior: 'smooth' })`);
+  await sleep(1000);
+  await cap('Open one and it carries its trail: the fields, the host it is bound to, and under '
+    + '<b>Adjudication</b> every decision anybody made about it, with a name and a time.', 4800);
+
+  await page.send('Input.dispatchKeyEvent',
+    { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+  await page.send('Input.dispatchKeyEvent',
+    { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+  await page.evaluate(`(() => {
+    const q = document.querySelector('#view #q');
+    if (!q) return;
+    q.value = '';
+    q.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+  await sleep(1300);
+  await cap('Denied is kept — it is a judgement. Archiving is separate and retires a record '
+    + 'from the map, the timeline and the prompt; nothing is ever deleted.', 4400);
+
+  // --- map -----------------------------------------------------------------
+  await cap('');
+  await route('map', 3200);
+  await sleep(1200);
+  await cap('The estate, clustered by enclave. Fill is evidence and verdict; the outline is '
+    + 'presence — whether the address answered. A box that answers a ping is not thereby '
+    + 'clean.', 4800);
+  await cap('The diamond is an address nobody entered. Evidence named it, so it is on the map, '
+    + 'marked as absent from the terrain rather than quietly added to it.', 4400);
+  await cap('The edges are derived from the records on read and never stored, so the graph '
+    + 'cannot drift from the evidence that justifies it.', 3800);
+
+  // --- timeline ------------------------------------------------------------
+  await cap('');
+  await route('timeline', 2600);
+  await cap('The same evidence in time. Filled is adjudicated, hollow is pending; a dashed '
+    + 'outline means the recorded time was approximate. The purple arcs are causality '
+    + 'somebody confirmed.', 5000);
+  await cap('The fourth link is still a proposal, with its rationale, waiting for a call. It '
+    + 'opened on the densest stretch on purpose — a month-old outlier beside a night\'s work '
+    + 'leaves the night unreadable.', 5200);
+
+  // --- characterization ----------------------------------------------------
+  await cap('');
+  await route('characterization', 2400);
+  await cap('What normal looks like, so a finding has something to be judged against.', 2800);
+  await cap('A second collection came back without the shell and home columns. A naive diff '
+    + 'calls every row changed; here the gap was acknowledged, the rows band as <b>Partial</b>, '
+    + 'and they stop counting as changes.', 5600);
+  await cap('Coverage is stated, not implied: the hosts a snapshot has not reached, and when '
+    + 'each was last seen. It stays "still collecting" until somebody says it is done.', 4600);
+  await page.click('[data-repo="scheduled-tasks"]', { settle: 1800 });
+  await cap('Nineteen repositories, each with its own idea of identity. Three cron entries on '
+    + 'six hosts and a fourth on one — <b>1 of 6</b> is worth a look; 6 of 6 would be '
+    + 'inventory.', 5000);
+
+  // --- plan ----------------------------------------------------------------
+  await cap('');
+  await route('plan', 2200);
+  await cap('The hunt plan. The file is the authority and the database is rebuilt from it at '
+    + 'every start, so a week of team edits cannot be lost to a restart.', 4200);
+  await page.click('#view [data-expand]', { settle: 1800 });
+  await cap('Intent, technique, the procedure to run, the evidence to expect, who has it, and '
+    + 'its own history.', 3600);
+
+  await page.click('#view [data-mode="coverage"]', { settle: 2600 });
+  await cap('The same plan against ATT&CK, coloured by what it <b>intends</b> — a different '
+    + 'question from the Navigator export, which says what was found. The gap between them is '
+    + 'the useful part.', 5200);
+  await cap('Three states, not two: nothing names it; a task names it with nothing written '
+    + 'under it; a task names it and carries steps. Forty stubs look thorough in a list.', 5000);
+  await page.click('#view .cov-cell.cov-none', { settle: 2200 });
+  await cap('A gap opens its bank entry — every live technique, 697 Enterprise and 97 ICS, '
+    + 'plus entries ATT&CK has no id for. What backs each one is stamped on it, and a stub '
+    + 'says it is a stub.', 5400);
+
+  // --- comms ---------------------------------------------------------------
+  await cap('');
+  await route('comms', 2400);
+  await cap('And a place for the team to talk that is not the model. A session can produce '
+    + 'records; a channel produces nothing but its own history.', 4200);
+  await cap('Direct messages are the one thing here that is private. Everything else is open, '
+    + 'because review across the team is what the tool is for.', 4000);
+
+  await cap('');
+  await sleep(600);
+  await card(page, CLOSING);
+  await sleep(5500);
 }
 
 // --- drive it ---------------------------------------------------------------

@@ -355,9 +355,26 @@ function bindTray() {
 function linksHtml() {
   const proposed = state.edges.filter(e => e.status === 'proposed');
   if (proposed.length === 0) return '';
+  /*
+    Resolved from the rows this view fetched, then from the browser's cache.
+
+    recordById() alone reads state.records, which is a cache of what this
+    browser has happened to see and stopped being the case file when search
+    moved to the server. So a proposed link — the one thing on this page asking
+    somebody to make a decision — rendered "From (missing record) / To (missing
+    record)" whenever its endpoints were not in that cache, which is most of the
+    time and was true in this repository's own published screenshot. An analyst
+    is being asked to confirm causality between two findings the card will not
+    name.
+
+    An id that resolves nowhere says so as an id, because "(missing record)"
+    twice tells the reader nothing they can act on, and the id at least names
+    the row to go and look at.
+  */
+  const byId = new Map(rows.map(r => [r.id, r]));
   const label = (id) => {
-    const r = recordById(id);
-    if (!r) return '(missing record)';
+    const r = byId.get(id) ?? recordById(id);
+    if (!r) return `record ${String(id).slice(0, 8)} — not in this view`;
     return `${r.hostname ?? 'unknown host'} — ${(r.description ?? '').slice(0, 60)}`;
   };
   return `
