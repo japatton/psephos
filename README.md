@@ -15,7 +15,8 @@ No `npm install`. No build step. Node 24 built-ins and one vendored copy of D3.
 
 ![Eighty-five seconds of Psephos: a proposal confirmed, the case file, the map, the timeline, and the plan against ATT&CK](docs/psephos-reel.gif)
 
-*Eighty-five seconds of it working. There is a [cleaner MP4](docs/psephos-reel.mp4), and a
+*Eighty-five seconds of it working. There is a [cleaner MP4](docs/psephos-reel.mp4), a
+[narrated version with subtitles](https://github.com/japatton/psephos/releases/latest), and a
 [five-minute tour](https://github.com/japatton/psephos/releases/latest) that starts from an
 empty clone and includes a real model turn.*
 
