@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { openDb, initSchema } from '../store/db.js';
 import { seedAll } from '../store/seed.js';
 import { createRecord } from '../store/records.js';
+import { proposeEdge } from '../store/edges.js';
 import { listThreads } from '../store/threads.js';
 import { createServer } from '../server/http.js';
 import { closeAll } from '../server/sse.js';
@@ -56,7 +57,7 @@ before(async () => {
   seedAll(db);
 
   const threadId = listThreads(db)[0]?.id ?? null;
-  for (const r of [
+  const seeded = [
     { description: 'schtasks created a task in ProgramData', hostname: 'EX-DC',
       indicator: 'schtasks.exe', mitre: 'T1053.005', event_time: '2026-08-26 04:12:00Z',
       // Deliberately a field the bootstrap projection leaves out, so the drawer
@@ -64,7 +65,17 @@ before(async () => {
       analyst_notes: 'ONLY-IN-THE-FULL-ROW confirmed against the scheduled task list' },
     { description: 'beacon to an external host', hostname: 'EX-WEB',
       destination_ip: '203.0.113.25', mitre: 'T1071.001', event_time: '2026-08-26 05:01:00Z' },
-  ]) createRecord(db, r, { analyst: 'smoke', threadId });
+  ].map(r => createRecord(db, r, { analyst: 'smoke', threadId }));
+
+  /*
+    One proposed link, so the timeline's adjudication tray has a card on it.
+    Nothing else in this fixture puts one there, and the tray is the only place
+    in the application that asks somebody to make a call about causality.
+  */
+  proposeEdge(db, {
+    srcRecordId: seeded[0].id, dstRecordId: seeded[1].id, kind: 'caused',
+    rationale: 'The scheduled task is what started the beacon.',
+  }, 'smoke');
 
   server = createServer({ db, token: TOKEN, runtime: { setup: false } });
   await new Promise(r => server.listen(0, '127.0.0.1', r));
@@ -1029,6 +1040,43 @@ test('the timeline thread filter re-queries rather than redrawing', { skip }, as
   while (Date.now() < until && after === before) { await sleep(150); after = await marks(); }
   assert.equal(after, 0,
     'picking a thread with no findings left them on the chart, so the filter never reached the server');
+});
+
+/*
+  The proposed-link card has to name both of its records.
+
+  It resolved them through recordById(), which reads state.records — a cache of
+  whatever this browser has happened to be sent, and empty on a cold load of
+  this view, because the timeline asks the server for its own rows and search
+  moved server-side. So the one card in the application that asks an analyst to
+  adjudicate causality rendered "(missing record)" at both ends, on records that
+  were sitting in the store the whole time. It shipped that way in this
+  repository's own published screenshot.
+
+  Asserting on the hostnames rather than on the absence of the old string: a
+  card that named neither end is the bug, whatever wording it used to say so.
+*/
+test('a proposed link names both of its records', { skip }, async () => {
+  await page.goto(`${base}/#/timeline`);
+  assert.ok(await page.ready(), 'the shell never rendered');
+
+  const until = Date.now() + 8000;
+  let tray = '';
+  while (Date.now() < until) {
+    await sleep(200);
+    tray = await page.evaluate(
+      `document.querySelector('#view #links')?.textContent.replace(/\\s+/g, ' ').trim() ?? ''`);
+    if (/awaiting your call/.test(tray)) break;
+  }
+  assert.match(tray, /awaiting your call/, 'the fixture must put a proposed link in the tray');
+
+  assert.match(tray, /EX-DC — schtasks created a task in ProgramData/,
+    `the From end went unnamed: ${tray}`);
+  assert.match(tray, /EX-WEB — beacon to an external host/,
+    `the To end went unnamed: ${tray}`);
+
+  const errors = await page.errors();
+  assert.deepEqual(errors, [], `the link tray threw: ${errors.join(' | ')}`);
 });
 
 /*
