@@ -599,8 +599,14 @@ timestamps, and prints the encode command rather than running it — ffmpeg is t
 in this repository that is not in the box. `--tour` records the long version instead and
 takes `--setup-url` and `--setup-token` for a second, mission-less instance, so the wizard
 is filmed being walked rather than described. A headless capture has no pointer and a
-recording has no narration, so both are drawn into the page: a synthetic cursor that moves
-to whatever is about to be clicked, and a caption bar.
+silent recording has no narration, so both are drawn into the page: a synthetic cursor
+that moves to whatever is about to be clicked, and a caption bar.
+
+`--voice "Ava"` speaks the captions with macOS's own `say` and writes an SRT beside the
+frames — no cloud API, for the same reason as everything else here. Every line is spoken
+and measured before the browser opens, because the shot is held for as long as its line
+takes to say; aligning afterwards would mean trimming the video or speeding up the
+speech, and both are audible.
 
 ## Tests
 
@@ -608,7 +614,7 @@ to whatever is about to be clicked, and a caption bar.
 npm test
 ```
 
-790 tests, no framework. (Run it through `npm`, or pass `--import ./test/_env.js`
+803 tests, no framework. (Run it through `npm`, or pass `--import ./test/_env.js`
 yourself: that module is what points the suite at a scratch plan file, and without it a
 test run writes into `data/plan.json` — a live engagement's plan.) The riskiest modules are tested against the actual messy values
 that broke them: the event-time parser against the analyst workbook's real spellings, the
