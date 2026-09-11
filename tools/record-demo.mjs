@@ -29,6 +29,7 @@
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { synthesise, schedule, narrationPlan, srt } from './narration.mjs';
 
 export const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -921,116 +922,6 @@ async function tour(page, { setupUrl, setupToken, demoUrl, demoToken, live }) {
   await sleep(4000);
 }
 
-/* ------------------------------------------------------------------------- *
- * Narration.
- *
- * macOS speaks it — `say` is in the box, the Premium voices are free and
- * offline, and a recording of a tool whose whole argument is that it installs
- * nothing should not need a cloud API to have a voice.
- *
- * Synthesised BEFORE anything is filmed, because the picture follows the
- * voice rather than the other way round: each line's real duration is what
- * the shot is held for. Aligning afterwards means either trimming the video
- * or speeding up the speech, and both are audible.
- * ------------------------------------------------------------------------- */
-
-/** Strip the caption's markup — <b> is cyan on screen and nothing to the ear. */
-const stripped = (caption) => caption.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-
-/*
-  What to feed the synthesiser where the spelling defeats it.
-
-  The subtitle keeps the real spelling; only the voice gets these. The rule
-  behind the list: no identifier, no technique number, no roster surname and no
-  hyphenated compound is ever spoken — where one was needed, the line was
-  rewritten instead of fought, which is why this table is short.
-*/
-const SAY_AS = [
-  [/\bPsephos\b/g, 'Seefoss'],
-  [/ATT&CK/g, 'attack'],
-  [/\bCLI\b/g, 'C L I'],
-  [/\bAPI\b/g, 'A P I'],
-  [/\bcron\b/g, 'kron'],
-  [/\bgitignored\b/g, 'git ignored'],
-  [/owner-only/g, 'owner only'],
-  [/mid-hunt/g, 'mid hunt'],
-];
-const spoken = (caption) =>
-  SAY_AS.reduce((t, [re, to]) => t.replace(re, to), stripped(caption));
-
-/**
- * Speak every line and measure it.
- * @returns Map of caption text -> { file, ms }
- */
-async function synthesise(lines, { voice, dir, rate }) {
-  const { execFileSync } = await import('node:child_process');
-  mkdirSync(dir, { recursive: true });
-  const table = new Map();
-
-  for (const [i, caption] of lines.entries()) {
-    const text = spoken(caption);
-    if (!text) continue;
-    const file = join(dir, `line-${String(i).padStart(3, '0')}.aiff`);
-    execFileSync('say', ['-v', voice, ...(rate ? ['-r', String(rate)] : []), '-o', file, text]);
-    const probe = execFileSync('ffprobe',
-      ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file],
-      { encoding: 'utf8' });
-    const ms = Math.round(Number(probe.trim()) * 1000);
-    if (!Number.isFinite(ms)) throw new Error(`could not measure ${file}`);
-    table.set(caption, { file, ms });
-  }
-  return table;
-}
-
-/**
- * The narration track, laid against the frame timestamps the beats recorded.
- *
- * Built as one concat of silence and clips rather than a forty-input mix: the
- * beats never overlap, so the simple thing is also the exact thing.
- */
-function narrationPlan(beats, table, frames) {
-  if (!frames.length) return [];
-  const t0 = frames[0].t;
-  const plan = [];
-  let cursor = 0;
-  for (const b of beats) {
-    const clip = table.get(b.text);
-    if (!clip || b.at == null) continue;
-    const at = Math.max(0, Math.round((b.at - t0) * 1000));
-    if (at < cursor) continue;              // a line that would talk over the last
-    plan.push({ silence: at - cursor, file: clip.file, ms: clip.ms });
-    cursor = at + clip.ms;
-  }
-  const total = Math.round((frames.at(-1).t - t0) * 1000);
-  if (total > cursor) plan.push({ silence: total - cursor, file: null, ms: 0 });
-  return plan;
-}
-
-/** Subtitles, because a recording with a voice is still watched muted. */
-function srt(beats, table, frames) {
-  if (!frames.length) return '';
-  const t0 = frames[0].t;
-  const stamp = (ms) => {
-    const h = String(Math.floor(ms / 3600000)).padStart(2, '0');
-    const m = String(Math.floor(ms / 60000) % 60).padStart(2, '0');
-    const sec = String(Math.floor(ms / 1000) % 60).padStart(2, '0');
-    return `${h}:${m}:${sec},${String(ms % 1000).padStart(3, '0')}`;
-  };
-  const out = [];
-  beats.forEach((b, i) => {
-    if (b.at == null) return;
-    const start = Math.max(0, Math.round((b.at - t0) * 1000));
-    const clip = table.get(b.text);
-    const next = beats.slice(i + 1).find(x => x.at != null);
-    const end = clip ? start + clip.ms + 400
-      : next ? Math.round((next.at - t0) * 1000) - 100 : start + 3000;
-    // The real spelling, not the one the synthesiser was fed: "Seefoss" is for
-    // the voice, and a subtitle that says it is a subtitle with a typo in it.
-    out.push(`${out.length + 1}\n${stamp(start)} --> ${stamp(Math.max(end, start + 900))}\n${stripped(b.text)}\n`);
-  });
-  return out.join('\n');
-}
-
 // --- drive it ---------------------------------------------------------------
 
 const WHICH = process.argv.includes('--tour') ? 'tour'
@@ -1099,10 +990,11 @@ try {
   if (voice && page.frames.length) {
     /*
       The audio track, written as its own concat script: silence up to each
-      line, then the line. The beats do not overlap, so this is exact without
-      a mixer.
+      line, then the line. One schedule feeds both this and the subtitles, so
+      a line the voice skips cannot still appear as a caption.
     */
-    const plan = narrationPlan(page.beats, narration, page.frames);
+    const cues = schedule(page.beats, narration, page.frames);
+    const plan = narrationPlan(cues, page.frames);
     const silences = join(out, 'voice');
     const parts = [];
     for (const [i, step] of plan.entries()) {
@@ -1116,8 +1008,8 @@ try {
     }
     writeFileSync(join(out, 'audio.txt'),
       parts.map(f => `file '${f}'`).join('\n') + '\n');
-    writeFileSync(join(out, `${WHICH}.srt`), srt(page.beats, narration, page.frames));
-    console.log(`narration: ${plan.length} cues, subtitles in ${WHICH}.srt`);
+    writeFileSync(join(out, `${WHICH}.srt`), srt(cues));
+    console.log(`narration: ${cues.length} cues, subtitles in ${WHICH}.srt`);
   }
 
   console.log('encode with:');
